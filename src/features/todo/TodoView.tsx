@@ -55,21 +55,21 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
       )}
       <ul>
         {items.map((t) => (
-          <li key={t.id} className="flex items-center gap-3 border-b border-line px-4 py-3">
+          <li key={t.id} className="flex items-start gap-3 border-b border-line px-4 py-3">
             <input
               type="checkbox"
               checked={t.is_done}
               onChange={() => toggle(t)}
-              className="h-4 w-4 accent-accent"
+              className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
             />
             <span
-              className={`min-w-0 flex-1 truncate text-sm ${
+              className={`min-w-0 flex-1 break-words text-sm leading-relaxed ${
                 t.is_done ? "text-muted line-through" : "text-ink"
               }`}
             >
               {t.content}
             </span>
-            <Button variant="danger" onClick={() => remove(t.id)}>
+            <Button variant="danger" onClick={() => remove(t.id)} className="shrink-0">
               删除
             </Button>
           </li>
