@@ -40,9 +40,9 @@ function LogOutIcon() {
 }
 
 const tabs: { key: TabKey; label: string; Icon: () => ReactElement }[] = [
+  { key: "todo", label: "待办", Icon: CheckSquareIcon },
   { key: "reminder", label: "提醒", Icon: BellIcon },
   { key: "timer", label: "计时", Icon: ClockIcon },
-  { key: "todo", label: "待办", Icon: CheckSquareIcon },
 ];
 
 export function TabBar({
