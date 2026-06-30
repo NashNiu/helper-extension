@@ -41,8 +41,8 @@ export function TimerView() {
   if (timer) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 p-6">
-        <p className="text-slate-500">{timer.name}</p>
-        <p className="font-mono text-5xl tabular-nums text-slate-800">{fmt(remaining)}</p>
+        <p className="text-sm text-muted">{timer.name}</p>
+        <p className="font-mono text-5xl tabular-nums text-ink">{fmt(remaining)}</p>
         <Button variant="ghost" onClick={reset}>
           重置
         </Button>
@@ -52,16 +52,16 @@ export function TimerView() {
 
   return (
     <div className="p-3">
-      <p className="mb-2 text-xs text-slate-400">选择一个计时</p>
+      <p className="mb-2 text-xs text-muted">选择一个计时</p>
       <div className="grid grid-cols-2 gap-2">
         {presets.map((t) => (
           <button
             key={t.id}
             onClick={() => start(t)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-4 text-center hover:border-indigo-400"
+            className="rounded-xl border border-line bg-surface px-3 py-4 text-center transition hover:border-accent"
           >
-            <span className="block text-sm font-medium text-slate-800">{t.name}</span>
-            <span className="block text-xs text-slate-400">
+            <span className="block text-sm font-medium text-ink">{t.name}</span>
+            <span className="block text-xs text-muted">
               {Math.round(t.duration_seconds / 60)} 分钟
             </span>
           </button>

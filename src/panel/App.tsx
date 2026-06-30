@@ -13,7 +13,7 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   if (status === "loading") {
-    return <div className="flex h-full items-center justify-center text-slate-400">加载中…</div>;
+    return <div className="flex h-full items-center justify-center text-muted">加载中…</div>;
   }
   if (status === "out") {
     return <LoginView onLogin={signIn} />;
@@ -22,14 +22,14 @@ export default function App() {
   const bump = () => setRefreshKey((k) => k + 1);
 
   return (
-    <div className="flex h-full flex-col">
-      <QuickAddBar onAdded={bump} onSignOut={signOut} />
+    <div className="flex h-full flex-col bg-ground">
+      <TabBar value={tab} onChange={setTab} onSignOut={signOut} />
+      <QuickAddBar onAdded={bump} />
       <main className="min-h-0 flex-1 overflow-y-auto">
         {tab === "reminder" && <ReminderView refreshKey={refreshKey} />}
         {tab === "timer" && <TimerView />}
         {tab === "todo" && <TodoView refreshKey={refreshKey} />}
       </main>
-      <TabBar value={tab} onChange={setTab} />
     </div>
   );
 }

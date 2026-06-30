@@ -3,6 +3,15 @@ import { reminderApi, type Reminder } from "../../shared/api/reminder";
 import { formatDateTime } from "../../shared/datetime";
 import { Button } from "../../components/Button";
 
+function BellIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  );
+}
+
 export function ReminderView({ refreshKey }: { refreshKey: number }) {
   const [items, setItems] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,24 +42,28 @@ export function ReminderView({ refreshKey }: { refreshKey: number }) {
     }
   }
 
-  if (loading) return <p className="p-4 text-slate-400">加载中…</p>;
-  if (items.length === 0 && !err) return <p className="p-4 text-slate-400">暂无待触发的提醒</p>;
+  if (loading) return <p className="p-4 text-muted">加载中…</p>;
+  if (items.length === 0 && !err) return <p className="p-4 text-muted">暂无待触发的提醒</p>;
 
   return (
     <>
       {err && (
-        <div className="px-4 py-2 text-sm text-red-600 bg-red-50 border-b border-red-200">
+        <div className="border-b border-line bg-danger/5 px-4 py-2 text-sm text-danger">
           {err}
         </div>
       )}
-      <ul className="divide-y divide-slate-100">
+      <p className="px-4 pt-3 pb-1 text-xs text-muted">待触发的提醒</p>
+      <ul>
         {items.map((r) => (
-          <li key={r.id} className="flex items-center gap-2 px-4 py-3">
+          <li key={r.id} className="flex items-start gap-3 border-b border-line px-4 py-3">
+            <span className="mt-0.5 flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent-ink">
+              <BellIcon />
+            </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm text-slate-800">{r.message}</p>
-              <p className="text-xs text-slate-400">{formatDateTime(r.trigger_at)}</p>
+              <p className="break-words text-sm leading-relaxed text-ink">{r.message}</p>
+              <p className="tabular-nums text-xs text-muted">{formatDateTime(r.trigger_at)}</p>
             </div>
-            <Button variant="danger" onClick={() => remove(r.id)}>
+            <Button variant="danger" onClick={() => remove(r.id)} className="shrink-0">
               删除
             </Button>
           </li>

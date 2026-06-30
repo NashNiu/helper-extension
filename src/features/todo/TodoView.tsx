@@ -43,33 +43,33 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
     }
   }
 
-  if (loading) return <p className="p-4 text-slate-400">加载中…</p>;
-  if (items.length === 0 && !err) return <p className="p-4 text-slate-400">暂无待办</p>;
+  if (loading) return <p className="p-4 text-muted">加载中…</p>;
+  if (items.length === 0 && !err) return <p className="p-4 text-muted">暂无待办</p>;
 
   return (
     <>
       {err && (
-        <div className="px-4 py-2 text-sm text-red-600 bg-red-50 border-b border-red-200">
+        <div className="border-b border-line bg-danger/5 px-4 py-2 text-sm text-danger">
           {err}
         </div>
       )}
-      <ul className="divide-y divide-slate-100">
+      <ul>
         {items.map((t) => (
-          <li key={t.id} className="flex items-center gap-2 px-4 py-3">
+          <li key={t.id} className="flex items-start gap-3 border-b border-line px-4 py-3">
             <input
               type="checkbox"
               checked={t.is_done}
               onChange={() => toggle(t)}
-              className="h-4 w-4 accent-indigo-600"
+              className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
             />
             <span
-              className={`min-w-0 flex-1 truncate text-sm ${
-                t.is_done ? "text-slate-400 line-through" : "text-slate-800"
+              className={`min-w-0 flex-1 break-words text-sm leading-relaxed ${
+                t.is_done ? "text-muted line-through" : "text-ink"
               }`}
             >
               {t.content}
             </span>
-            <Button variant="danger" onClick={() => remove(t.id)}>
+            <Button variant="danger" onClick={() => remove(t.id)} className="shrink-0">
               删除
             </Button>
           </li>

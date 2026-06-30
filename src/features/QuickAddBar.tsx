@@ -9,12 +9,18 @@ import { routeQuickAdd } from "./quickAdd";
 
 const LABELS: Record<string, string> = { reminder: "提醒", timer: "计时", todo: "待办" };
 
+function PlusIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
 export function QuickAddBar({
   onAdded,
-  onSignOut,
 }: {
   onAdded: () => void;
-  onSignOut: () => void;
 }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -47,23 +53,30 @@ export function QuickAddBar({
   }
 
   return (
-    <header className="border-b border-slate-200 bg-white p-2">
+    <header className="border-b border-line bg-ground p-2">
       <div className="flex items-center gap-2">
         <Input
+          className="min-w-0"
           placeholder="一句话添加…"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && submit()}
           disabled={busy}
         />
-        <Button onClick={submit} disabled={busy || !text.trim()}>
-          {busy ? "…" : "添加"}
-        </Button>
-        <Button variant="ghost" onClick={onSignOut} title="退出登录">
-          退出
+        <Button
+          onClick={submit}
+          disabled={busy || !text.trim()}
+          className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap"
+        >
+          {busy ? "…" : (
+            <>
+              <PlusIcon />
+              添加
+            </>
+          )}
         </Button>
       </div>
-      {hint && <p className="mt-1 px-1 text-xs text-slate-400">{hint}</p>}
+      {hint && <p className="mt-1 px-1 text-xs text-muted">{hint}</p>}
     </header>
   );
 }

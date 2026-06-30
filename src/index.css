@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+@theme {
+  --color-ground: #f6f5f2;
+  --color-surface: #ffffff;
+  --color-ink: #23272f;
+  --color-muted: #8a8f99;
+  --color-line: #ebe9e4;
+  --color-accent: #2e7d72;
+  --color-accent-soft: #e3eeeb;
+  --color-accent-ink: #246159;
+  --color-danger: #b06a52;
+}
+
 :root {
   color-scheme: light;
 }
@@ -11,6 +23,6 @@ html, body, #root {
 
 body {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  background: #f8fafc;
-  color: #1e293b;
+  background: var(--color-ground);
+  color: var(--color-ink);
 }
