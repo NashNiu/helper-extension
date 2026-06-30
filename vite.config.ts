@@ -14,5 +14,6 @@ export default defineConfig({
   resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
   // CRXJS 需要固定的 HMR 端口
   server: { port: 5174, strictPort: true, hmr: { port: 5174 } },
+  // @ts-expect-error Vitest augments Vite's config with `test`; vite's own UserConfig type omits it
   test: { environment: "happy-dom", globals: true },
-} as any);
+});
