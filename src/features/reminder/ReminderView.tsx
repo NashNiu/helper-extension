@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { reminderApi, type Reminder } from "../../shared/api/reminder";
 import { formatDateTime } from "../../shared/datetime";
 import { Button } from "../../components/Button";
+import { Loading } from "../../components/Loading";
 
 function BellIcon() {
   return (
@@ -42,7 +43,7 @@ export function ReminderView({ refreshKey }: { refreshKey: number }) {
     }
   }
 
-  if (loading) return <p className="p-4 text-muted">加载中…</p>;
+  if (loading) return <Loading />;
   if (items.length === 0 && !err) return <p className="p-4 text-muted">暂无待触发的提醒</p>;
 
   return (
