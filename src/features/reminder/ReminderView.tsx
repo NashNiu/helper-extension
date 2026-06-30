@@ -25,8 +25,12 @@ export function ReminderView({ refreshKey }: { refreshKey: number }) {
   }, [refreshKey]);
 
   async function remove(id: number) {
-    await reminderApi.remove(id);
-    setItems((xs) => xs.filter((x) => x.id !== id));
+    try {
+      await reminderApi.remove(id);
+      setItems((xs) => xs.filter((x) => x.id !== id));
+    } catch {
+      setErr("删除失败");
+    }
   }
 
   if (loading) return <p className="p-4 text-slate-400">加载中…</p>;
