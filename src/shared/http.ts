@@ -55,7 +55,7 @@ export async function apiFetch<T>(
       try {
         (self as unknown as EventTarget).dispatchEvent(new Event(UNAUTHORIZED_EVENT));
       } catch {
-        /* SW 中无 dispatchEvent 时忽略 */
+        /* 某些环境构造 Event 或 dispatch 失败时静默忽略 */
       }
     }
     const fallback = res.status >= 500 ? "服务器开了个小差，请稍后再试" : "请求失败";

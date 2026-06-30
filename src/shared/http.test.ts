@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { apiFetch, ApiError } from "./http";
+import { apiFetch, ApiError, UNAUTHORIZED_EVENT } from "./http";
 
 const store: Record<string, unknown> = {};
 beforeEach(() => {
@@ -50,10 +50,13 @@ describe("apiFetch", () => {
     });
   });
 
-  it("clears token on 401", async () => {
+  it("clears token on 401 and dispatches UNAUTHORIZED_EVENT", async () => {
     store["helper.auth.token"] = "tok";
     mockFetch(401, { message: "unauthorized" });
+    const dispatchSpy = vi.spyOn(self, "dispatchEvent");
     await expect(apiFetch("/api/x")).rejects.toBeInstanceOf(ApiError);
     expect(store["helper.auth.token"]).toBeUndefined();
+    expect(dispatchSpy.mock.calls.some(([e]) => (e as Event).type === UNAUTHORIZED_EVENT)).toBe(true);
+    dispatchSpy.mockRestore();
   });
 });
