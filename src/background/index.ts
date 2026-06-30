@@ -22,7 +22,7 @@ chrome.runtime.onStartup.addListener(() => {
 });
 
 async function notify(id: string, title: string, message: string) {
-  chrome.notifications.create(id, {
+  await chrome.notifications.create(id, {
     type: "basic",
     iconUrl: ICON,
     title,
@@ -82,7 +82,10 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 // 点击任意通知 → 打开侧边栏（需在用户手势上下文之外尽力打开当前窗口）
 chrome.notifications.onClicked.addListener((id) => {
   chrome.notifications.clear(id);
-  chrome.windows.getCurrent().then((w) => {
-    if (w.id !== undefined) chrome.sidePanel.open({ windowId: w.id }).catch(() => {});
-  });
+  chrome.windows
+    .getCurrent()
+    .then((w) => {
+      if (w.id !== undefined) chrome.sidePanel.open({ windowId: w.id }).catch(() => {});
+    })
+    .catch(() => {});
 });
