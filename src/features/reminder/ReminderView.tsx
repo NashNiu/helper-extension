@@ -44,7 +44,7 @@ export function ReminderView({ refreshKey }: { refreshKey: number }) {
   }
 
   if (loading) return <Loading />;
-  if (items.length === 0 && !err) return <p className="p-4 text-muted">暂无待触发的提醒</p>;
+  if (items.length === 0 && !err) return <p className="p-4 text-muted text-center">暂无待触发的提醒</p>;
 
   return (
     <>

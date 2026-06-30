@@ -6,6 +6,7 @@ import {
   reminderIdFromAlarm,
 } from "./logic";
 import { reminderApi } from "../shared/api/reminder";
+import { hasToken } from "../shared/auth";
 import { getActiveTimer, setActiveTimer } from "../shared/activeTimer";
 
 const ICON = "icon-128.png";
@@ -24,7 +25,7 @@ chrome.runtime.onStartup.addListener(() => {
 async function notify(id: string, title: string, message: string) {
   await chrome.notifications.create(id, {
     type: "basic",
-    iconUrl: ICON,
+    iconUrl: chrome.runtime.getURL(ICON),
     title,
     message,
     priority: 2,
@@ -32,6 +33,7 @@ async function notify(id: string, title: string, message: string) {
 }
 
 async function fireReminder(reminderId: number) {
+  if (!(await hasToken())) return; // 未登录时不打扰
   try {
     const pending = await reminderApi.listPending();
     const r = pending.find((x) => x.id === reminderId);
@@ -44,6 +46,7 @@ async function fireReminder(reminderId: number) {
 }
 
 async function runHeartbeat() {
+  if (!(await hasToken())) return; // 未登录时跳过，避免每分钟 401 噪音
   try {
     const pending = await reminderApi.listPending();
     const { dueNow, toSchedule } = planReminders(pending, Date.now());
