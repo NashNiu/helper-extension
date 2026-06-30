@@ -3,7 +3,7 @@ import { Button } from "../components/Button";
 import { Input } from "../components/Input";
 import { ApiError } from "../shared/http";
 
-const WEB_URL = "https://helper-frontend-production.up.railway.app/register";
+const WEB_URL = "https://helper-blond.vercel.app/register";
 
 export function LoginView({ onLogin }: { onLogin: (id: string, pw: string) => Promise<void> }) {
   const [id, setId] = useState("");

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { todoApi, type Todo } from "../../shared/api/todo";
 import { Button } from "../../components/Button";
+import { Loading } from "../../components/Loading";
 
 export function TodoView({ refreshKey }: { refreshKey: number }) {
   const [items, setItems] = useState<Todo[]>([]);
@@ -43,7 +44,7 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
     }
   }
 
-  if (loading) return <p className="p-4 text-muted">加载中…</p>;
+  if (loading) return <Loading />;
   if (items.length === 0 && !err) return <p className="p-4 text-muted">暂无待办</p>;
 
   return (
