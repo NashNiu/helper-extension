@@ -24,8 +24,8 @@ export function LoginView({ onLogin }: { onLogin: (id: string, pw: string) => Pr
   }
 
   return (
-    <div className="flex h-full flex-col justify-center gap-3 p-6">
-      <h1 className="text-lg font-semibold">登录 Helper</h1>
+    <div className="flex h-full flex-col justify-center gap-3 bg-ground p-6">
+      <h1 className="text-lg font-semibold text-ink">登录 Helper</h1>
       <Input placeholder="用户名或邮箱" value={id} onChange={(e) => setId(e.target.value)} />
       <Input
         type="password"
@@ -34,15 +34,15 @@ export function LoginView({ onLogin }: { onLogin: (id: string, pw: string) => Pr
         onChange={(e) => setPw(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && submit()}
       />
-      {err && <p className="text-sm text-red-600">{err}</p>}
-      <Button onClick={submit} disabled={busy || !id || !pw}>
+      {err && <p className="text-sm text-danger">{err}</p>}
+      <Button onClick={submit} disabled={busy || !id || !pw} className="w-full">
         {busy ? "登录中…" : "登录"}
       </Button>
       <a
         href={WEB_URL}
         target="_blank"
         rel="noreferrer"
-        className="text-center text-xs text-slate-400 hover:text-indigo-600"
+        className="text-center text-xs text-muted hover:text-accent-ink transition"
       >
         没有账号？去网页版注册
       </a>
