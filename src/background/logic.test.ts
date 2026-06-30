@@ -31,11 +31,26 @@ describe("planReminders", () => {
       { name: `${REMINDER_ALARM_PREFIX}2`, when: Date.parse(future) },
     ]);
   });
+
+  it("excludes already-triggered reminders", () => {
+    const triggered = { ...r(9, "2026-06-30T11:00:00Z"), is_triggered: true };
+    const out = planReminders([triggered], now);
+    expect(out.dueNow).toEqual([]);
+    expect(out.toSchedule).toEqual([]);
+  });
+
+  it("treats trigger_at exactly equal to now as due", () => {
+    const iso = "2026-06-30T12:00:00Z"; // equals `now`
+    const out = planReminders([r(3, iso)], now);
+    expect(out.dueNow.map((x) => x.id)).toEqual([3]);
+    expect(out.toSchedule).toEqual([]);
+  });
 });
 
 describe("reminderIdFromAlarm", () => {
   it("parses id", () => expect(reminderIdFromAlarm("reminder:42")).toBe(42));
   it("returns null for others", () => expect(reminderIdFromAlarm("heartbeat")).toBeNull());
+  it("returns null for a non-integer suffix", () => expect(reminderIdFromAlarm("reminder:1.5")).toBeNull());
 });
 
 describe("remainingSeconds", () => {
