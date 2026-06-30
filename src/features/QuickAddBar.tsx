@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../components/Button";
 import { Input } from "../components/Input";
 import { classifyApi } from "../shared/api/classify";
@@ -52,10 +52,13 @@ export function QuickAddBar({
   const [busy, setBusy] = useState(false);
   const [hint, setHint] = useState("");
   const [hintKind, setHintKind] = useState<HintKind>("ok");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const submittedRef = useRef(false);
 
   async function submit() {
     const input = text.trim();
     if (!input) return;
+    submittedRef.current = true;
     setBusy(true);
     setHint("");
     try {
@@ -76,16 +79,37 @@ export function QuickAddBar({
       }
     } catch (e) {
       setHintKind("error");
-      setHint(e instanceof ApiError ? e.message : "添加失败，请稍后重试");
+      if (e instanceof ApiError && e.status === 0) {
+        setHint("网络不给力，请检查连接后重试");
+      } else {
+        setHint("没能添加成功，请稍后再试");
+      }
     } finally {
       setBusy(false);
     }
   }
 
+  // 提示自动消失：成功/未识别 3s，错误留长一点 6s。
+  useEffect(() => {
+    if (!hint) return;
+    const ms = hintKind === "error" ? 6000 : 3000;
+    const id = window.setTimeout(() => setHint(""), ms);
+    return () => clearTimeout(id);
+  }, [hint, hintKind]);
+
+  // 一次提交结束后（busy 落回 false），把焦点送回输入框，便于连续录入。
+  useEffect(() => {
+    if (!busy && submittedRef.current) {
+      submittedRef.current = false;
+      inputRef.current?.focus();
+    }
+  }, [busy]);
+
   return (
     <header className="border-b border-line bg-ground p-2">
       <div className="flex items-center gap-2">
         <Input
+          ref={inputRef}
           className="min-w-0"
           placeholder="一句话添加…"
           value={text}
