@@ -1,4 +1,4 @@
-import React from "react";
+import type { ReactElement } from "react";
 
 export type TabKey = "reminder" | "timer" | "todo";
 
@@ -39,7 +39,7 @@ function LogOutIcon() {
   );
 }
 
-const tabs: { key: TabKey; label: string; Icon: () => React.ReactElement }[] = [
+const tabs: { key: TabKey; label: string; Icon: () => ReactElement }[] = [
   { key: "reminder", label: "提醒", Icon: BellIcon },
   { key: "timer", label: "计时", Icon: ClockIcon },
   { key: "todo", label: "待办", Icon: CheckSquareIcon },
@@ -63,7 +63,7 @@ export function TabBar({
             <button
               key={t.key}
               onClick={() => onChange(t.key)}
-              className={`relative flex flex-1 items-center justify-center gap-1.5 py-2.5 text-sm transition ${
+              className={`relative flex flex-1 items-center justify-center gap-1.5 py-2.5 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
                 active
                   ? "font-semibold text-accent-ink"
                   : "font-normal text-muted hover:text-ink"
@@ -84,7 +84,7 @@ export function TabBar({
       <button
         onClick={onSignOut}
         aria-label="退出"
-        className="flex min-w-[40px] items-center justify-center border-l border-line px-3 text-muted transition hover:bg-black/5"
+        className="flex min-w-[40px] items-center justify-center border-l border-line px-3 text-muted transition hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
       >
         <LogOutIcon />
       </button>
