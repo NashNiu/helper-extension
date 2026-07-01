@@ -6,10 +6,11 @@ import {
   reminderIdFromAlarm,
 } from "./logic";
 import { reminderApi } from "../shared/api/reminder";
-import { hasToken } from "../shared/auth";
 import { getActiveTimer, setActiveTimer } from "../shared/activeTimer";
 
 const ICON = "icon-128.png";
+// 心跳/触发时需拿到全部待触发提醒(而非分页的前 10 条),故取一个较大的上限。
+const SCHEDULE_LIMIT = 500;
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel
@@ -33,9 +34,9 @@ async function notify(id: string, title: string, message: string) {
 }
 
 async function fireReminder(reminderId: number) {
-  if (!(await hasToken())) return; // 未登录时不打扰
+  // listPending 按登录态分流:登录读后端,未登录读本地。两种模式都要能触发。
   try {
-    const pending = await reminderApi.listPending();
+    const pending = await reminderApi.listPending(0, SCHEDULE_LIMIT);
     const r = pending.find((x) => x.id === reminderId);
     if (!r) return; // 已被删除/触发
     await notify(`${REMINDER_ALARM_PREFIX}${r.id}`, "提醒", r.message);
@@ -46,9 +47,8 @@ async function fireReminder(reminderId: number) {
 }
 
 async function runHeartbeat() {
-  if (!(await hasToken())) return; // 未登录时跳过，避免每分钟 401 噪音
   try {
-    const pending = await reminderApi.listPending();
+    const pending = await reminderApi.listPending(0, SCHEDULE_LIMIT);
     const { dueNow, toSchedule } = planReminders(pending, Date.now());
     for (const r of dueNow) {
       await notify(`${REMINDER_ALARM_PREFIX}${r.id}`, "提醒", r.message);

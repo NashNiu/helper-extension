@@ -36,9 +36,6 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
   // 后端已按 done=false 过滤；这里再兜底一次，兼容尚未部署该过滤的后端。
   const visible = items.filter((t) => !t.is_done);
 
-  if (loading) return <Loading />;
-  if (visible.length === 0 && !err) return <p className="p-4 text-center text-muted">暂无待办</p>;
-
   return (
     <>
       {err && (
@@ -46,25 +43,31 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
           {err}
         </div>
       )}
-      <ul>
-        {visible.map((t) => (
-          <li key={t.id} className="flex items-start gap-3 border-b border-line px-4 py-3">
-            <input
-              type="checkbox"
-              checked={false}
-              onChange={() => complete(t)}
-              className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
-              aria-label={`完成「${t.content}」`}
-            />
-            <span className="min-w-0 flex-1 break-words text-sm leading-relaxed text-ink">
-              {t.content}
-            </span>
-            <Button variant="danger" onClick={() => remove(t.id)} className="shrink-0">
-              删除
-            </Button>
-          </li>
-        ))}
-      </ul>
+      {loading ? (
+        <Loading />
+      ) : visible.length === 0 ? (
+        <p className="p-4 text-center text-muted">暂无待办</p>
+      ) : (
+        <ul>
+          {visible.map((t) => (
+            <li key={t.id} className="flex items-start gap-3 border-b border-line px-4 py-3">
+              <input
+                type="checkbox"
+                checked={false}
+                onChange={() => complete(t)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+                aria-label={`完成「${t.content}」`}
+              />
+              <span className="min-w-0 flex-1 break-words text-sm leading-relaxed text-ink">
+                {t.content}
+              </span>
+              <Button variant="danger" onClick={() => remove(t.id)} className="shrink-0">
+                删除
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
       {hasMore && <div ref={sentinelRef} aria-hidden="true" className="h-px" />}
       {loadingMore && <p className="py-3 text-center text-xs text-muted">加载中…</p>}
     </>

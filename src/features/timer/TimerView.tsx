@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { timerApi, type Timer } from "../../shared/api/timer";
 import { setActiveTimer } from "../../shared/activeTimer";
+import { startTimer } from "../../shared/timerControl";
 import { TIMER_ALARM } from "../../background/logic";
 import { useCountdown } from "./useCountdown";
 import { Button } from "../../components/Button";
@@ -11,24 +12,17 @@ function fmt(sec: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-export function TimerView() {
+export function TimerView({ refreshKey }: { refreshKey: number }) {
   const [presets, setPresets] = useState<Timer[]>([]);
   const { timer, remaining, refresh } = useCountdown();
 
+  // refreshKey 变化（含登录态切换）时重新拉取预设：未登录用内置，登录用后端。
   useEffect(() => {
     timerApi.list().then(setPresets).catch(() => {});
-  }, []);
+  }, [refreshKey]);
 
   async function start(t: Timer) {
-    const startAt = Date.now();
-    await setActiveTimer({
-      timerId: t.id,
-      name: t.name,
-      startAt,
-      durationSeconds: t.duration_seconds,
-      status: "running",
-    });
-    chrome.alarms.create(TIMER_ALARM, { when: startAt + t.duration_seconds * 1000 });
+    await startTimer(t.id, t.name, t.duration_seconds);
     await refresh();
   }
 
