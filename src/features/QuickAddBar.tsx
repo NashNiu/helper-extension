@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../components/Button";
 import { Input } from "../components/Input";
 import { classifyApi } from "../shared/api/classify";
+import { publicAiApi } from "../shared/api/publicAi";
 import { reminderApi } from "../shared/api/reminder";
 import { timerApi } from "../shared/api/timer";
 import { todoApi } from "../shared/api/todo";
+import { startTimer } from "../shared/timerControl";
 import { ApiError } from "../shared/http";
-import { routeQuickAdd } from "./quickAdd";
+import { routeQuickAdd, type QuickAddDeps } from "./quickAdd";
 
 const LABELS: Record<string, string> = { reminder: "提醒", timer: "计时", todo: "待办" };
 
@@ -45,8 +47,10 @@ function CheckIcon() {
 
 export function QuickAddBar({
   onAdded,
+  loggedIn,
 }: {
   onAdded: () => void;
+  loggedIn: boolean;
 }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -55,6 +59,31 @@ export function QuickAddBar({
   const inputRef = useRef<HTMLInputElement>(null);
   const submittedRef = useRef(false);
 
+  // 登录:后端 AI 解析并落库。未登录:公开 AI 接口只解析,结果写本地。
+  const deps = useMemo<QuickAddDeps>(
+    () =>
+      loggedIn
+        ? {
+            classify: classifyApi.classify,
+            createReminder: reminderApi.create,
+            createTimer: timerApi.createFromText,
+            createTodo: todoApi.create,
+          }
+        : {
+            classify: publicAiApi.classify,
+            createReminder: async (input) => {
+              const p = await publicAiApi.parseReminder(input);
+              await reminderApi.createManual(p);
+            },
+            createTimer: async (input) => {
+              const p = await publicAiApi.parseTimer(input);
+              await startTimer(0, p.name, p.duration_seconds);
+            },
+            createTodo: todoApi.create,
+          },
+    [loggedIn],
+  );
+
   async function submit() {
     const input = text.trim();
     if (!input) return;
@@ -62,12 +91,7 @@ export function QuickAddBar({
     setBusy(true);
     setHint("");
     try {
-      const handled = await routeQuickAdd(input, {
-        classify: classifyApi.classify,
-        createReminder: reminderApi.create,
-        createTimer: timerApi.createFromText,
-        createTodo: todoApi.create,
-      });
+      const handled = await routeQuickAdd(input, deps);
       if (handled.length === 0) {
         setHintKind("warn");
         setHint("未识别为提醒 / 计时 / 待办，换个说法试试");
@@ -81,6 +105,8 @@ export function QuickAddBar({
       setHintKind("error");
       if (e instanceof ApiError && e.status === 0) {
         setHint("网络不给力，请检查连接后重试");
+      } else if (e instanceof ApiError && e.status === 429) {
+        setHint("操作太频繁了，请稍后再试");
       } else {
         setHint("没能添加成功，请稍后再试");
       }

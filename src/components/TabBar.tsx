@@ -39,6 +39,16 @@ function LogOutIcon() {
   );
 }
 
+function LogInIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+      <polyline points="10 17 15 12 10 7" />
+      <line x1="15" y1="12" x2="3" y2="12" />
+    </svg>
+  );
+}
+
 const tabs: { key: TabKey; label: string; Icon: () => ReactElement }[] = [
   { key: "todo", label: "待办", Icon: CheckSquareIcon },
   { key: "reminder", label: "提醒", Icon: BellIcon },
@@ -48,11 +58,15 @@ const tabs: { key: TabKey; label: string; Icon: () => ReactElement }[] = [
 export function TabBar({
   value,
   onChange,
+  loggedIn,
   onSignOut,
+  onSignIn,
 }: {
   value: TabKey;
   onChange: (k: TabKey) => void;
+  loggedIn: boolean;
   onSignOut: () => void;
+  onSignIn: () => void;
 }) {
   return (
     <nav className="flex items-stretch border-b border-line bg-surface">
@@ -81,13 +95,25 @@ export function TabBar({
           );
         })}
       </div>
-      <button
-        onClick={onSignOut}
-        aria-label="退出"
-        className="flex min-w-[40px] items-center justify-center border-l border-line px-3 text-muted transition hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-      >
-        <LogOutIcon />
-      </button>
+      {loggedIn ? (
+        <button
+          onClick={onSignOut}
+          aria-label="退出登录"
+          title="退出登录"
+          className="flex min-w-[40px] items-center justify-center border-l border-line px-3 text-muted transition hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        >
+          <LogOutIcon />
+        </button>
+      ) : (
+        <button
+          onClick={onSignIn}
+          aria-label="登录以同步"
+          title="登录以同步"
+          className="flex min-w-[40px] items-center justify-center border-l border-line px-3 text-muted transition hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        >
+          <LogInIcon />
+        </button>
+      )}
     </nav>
   );
 }

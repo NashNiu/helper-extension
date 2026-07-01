@@ -1,4 +1,6 @@
 import { apiFetch } from "../http";
+import { hasToken } from "../auth";
+import { localTodos } from "../local/todos";
 
 export interface Todo {
   id: number;
@@ -8,17 +10,32 @@ export interface Todo {
   done_at: string | null;
 }
 
+function remoteCreate(content: string): Promise<Todo> {
+  const fd = new FormData();
+  fd.append("content", content);
+  return apiFetch<Todo>("/api/todos", { method: "POST", body: fd });
+}
+
+/**
+ * 登录时走后端,未登录时走本地(chrome.storage.local)。
+ * 调用处签名不变,自动按登录态分流。
+ */
 export const todoApi = {
-  list: () => apiFetch<Todo[]>("/api/todos"),
-  /** 仅未完成的待办，分页拉取（后端过滤，减少传输）。 */
-  listActive: (offset = 0, limit = 10) =>
-    apiFetch<Todo[]>(`/api/todos?done=false&limit=${limit}&offset=${offset}`),
-  create: (content: string) => {
-    const fd = new FormData();
-    fd.append("content", content);
-    return apiFetch<Todo>("/api/todos", { method: "POST", body: fd });
-  },
-  update: (id: number, data: { content?: string; is_done?: boolean }) =>
-    apiFetch<Todo>(`/api/todos/${id}`, { method: "PATCH", json: data }),
-  remove: (id: number) => apiFetch<void>(`/api/todos/${id}`, { method: "DELETE" }),
+  list: async () =>
+    (await hasToken()) ? apiFetch<Todo[]>("/api/todos") : localTodos.listActive(0, 1000),
+  /** 仅未完成的待办,分页拉取。 */
+  listActive: async (offset = 0, limit = 10) =>
+    (await hasToken())
+      ? apiFetch<Todo[]>(`/api/todos?done=false&limit=${limit}&offset=${offset}`)
+      : localTodos.listActive(offset, limit),
+  create: async (content: string) =>
+    (await hasToken()) ? remoteCreate(content) : localTodos.create(content),
+  update: async (id: number, data: { content?: string; is_done?: boolean }) =>
+    (await hasToken())
+      ? apiFetch<Todo>(`/api/todos/${id}`, { method: "PATCH", json: data })
+      : localTodos.update(id, data),
+  remove: async (id: number) =>
+    (await hasToken())
+      ? apiFetch<void>(`/api/todos/${id}`, { method: "DELETE" })
+      : localTodos.remove(id),
 };

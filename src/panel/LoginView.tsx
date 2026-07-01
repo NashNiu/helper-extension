@@ -5,7 +5,13 @@ import { ApiError } from "../shared/http";
 
 const WEB_URL = "https://helper-blond.vercel.app/register";
 
-export function LoginView({ onLogin }: { onLogin: (id: string, pw: string) => Promise<void> }) {
+export function LoginView({
+  onLogin,
+  onCancel,
+}: {
+  onLogin: (id: string, pw: string) => Promise<void>;
+  onCancel?: () => void;
+}) {
   const [id, setId] = useState("");
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
@@ -26,6 +32,7 @@ export function LoginView({ onLogin }: { onLogin: (id: string, pw: string) => Pr
   return (
     <div className="flex h-full flex-col justify-center gap-3 bg-ground p-6">
       <h1 className="text-lg font-semibold text-ink">登录 Helper</h1>
+      <p className="-mt-1 text-xs text-muted">登录后数据可在多设备间同步；不登录也能在本机使用。</p>
       <Input placeholder="用户名或邮箱" value={id} onChange={(e) => setId(e.target.value)} />
       <Input
         type="password"
@@ -38,6 +45,11 @@ export function LoginView({ onLogin }: { onLogin: (id: string, pw: string) => Pr
       <Button onClick={submit} disabled={busy || !id || !pw} className="w-full">
         {busy ? "登录中…" : "登录"}
       </Button>
+      {onCancel && (
+        <Button variant="ghost" onClick={onCancel} disabled={busy} className="w-full">
+          先不登录，本地使用
+        </Button>
+      )}
       <a
         href={WEB_URL}
         target="_blank"
