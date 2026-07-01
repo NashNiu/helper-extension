@@ -9,7 +9,7 @@ import { TodoView } from "../features/todo/TodoView";
 
 export default function App() {
   const { status, signIn, signOut } = useAuth();
-  const [tab, setTab] = useState<TabKey>("reminder");
+  const [tab, setTab] = useState<TabKey>("todo");
   const [refreshKey, setRefreshKey] = useState(0);
 
   if (status === "loading") {
