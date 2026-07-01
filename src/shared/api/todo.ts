@@ -10,8 +10,9 @@ export interface Todo {
 
 export const todoApi = {
   list: () => apiFetch<Todo[]>("/api/todos"),
-  /** 仅未完成的待办（后端过滤，减少传输）。 */
-  listActive: () => apiFetch<Todo[]>("/api/todos?done=false"),
+  /** 仅未完成的待办，分页拉取（后端过滤，减少传输）。 */
+  listActive: (offset = 0, limit = 10) =>
+    apiFetch<Todo[]>(`/api/todos?done=false&limit=${limit}&offset=${offset}`),
   create: (content: string) => {
     const fd = new FormData();
     fd.append("content", content);
