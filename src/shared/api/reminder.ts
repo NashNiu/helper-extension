@@ -10,7 +10,8 @@ export interface Reminder {
 
 export const reminderApi = {
   list: () => apiFetch<Reminder[]>("/api/reminders"),
-  listPending: () => apiFetch<Reminder[]>("/api/reminders?triggered=false"),
+  listPending: (offset = 0, limit = 10) =>
+    apiFetch<Reminder[]>(`/api/reminders?triggered=false&limit=${limit}&offset=${offset}`),
   create: (input: string) =>
     apiFetch<Reminder>("/api/reminders", { method: "POST", json: { input } }),
   markTriggered: (id: number) =>

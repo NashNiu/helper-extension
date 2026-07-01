@@ -1,28 +1,16 @@
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
 import { todoApi, type Todo } from "../../shared/api/todo";
 import { Button } from "../../components/Button";
 import { Loading } from "../../components/Loading";
+import { useInfiniteList } from "../../shared/useInfiniteList";
 
 export function TodoView({ refreshKey }: { refreshKey: number }) {
-  const [items, setItems] = useState<Todo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState("");
-
-  async function load() {
-    setLoading(true);
-    setErr("");
-    try {
-      setItems(await todoApi.listActive());
-    } catch {
-      setErr("加载失败");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void load();
-  }, [refreshKey]);
+  const fetchPage = useCallback(
+    (offset: number, limit: number) => todoApi.listActive(offset, limit),
+    [],
+  );
+  const { items, setItems, loading, loadingMore, hasMore, err, setErr, sentinelRef } =
+    useInfiniteList<Todo>(fetchPage, refreshKey);
 
   // 列表只含未完成项，勾选即标记完成并从列表移除。
   async function complete(t: Todo) {
@@ -77,6 +65,8 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
           </li>
         ))}
       </ul>
+      {hasMore && <div ref={sentinelRef} aria-hidden="true" className="h-px" />}
+      {loadingMore && <p className="py-3 text-center text-xs text-muted">加载中…</p>}
     </>
   );
 }

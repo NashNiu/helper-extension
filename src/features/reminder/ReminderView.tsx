@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
 import { reminderApi, type Reminder } from "../../shared/api/reminder";
 import { formatDateTime } from "../../shared/datetime";
 import { Button } from "../../components/Button";
 import { Loading } from "../../components/Loading";
+import { useInfiniteList } from "../../shared/useInfiniteList";
 
 function BellIcon() {
   return (
@@ -14,25 +15,12 @@ function BellIcon() {
 }
 
 export function ReminderView({ refreshKey }: { refreshKey: number }) {
-  const [items, setItems] = useState<Reminder[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState("");
-
-  async function load() {
-    setLoading(true);
-    setErr("");
-    try {
-      setItems(await reminderApi.listPending());
-    } catch {
-      setErr("加载失败");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void load();
-  }, [refreshKey]);
+  const fetchPage = useCallback(
+    (offset: number, limit: number) => reminderApi.listPending(offset, limit),
+    [],
+  );
+  const { items, setItems, loading, loadingMore, hasMore, err, setErr, sentinelRef } =
+    useInfiniteList<Reminder>(fetchPage, refreshKey);
 
   async function remove(id: number) {
     try {
@@ -70,6 +58,8 @@ export function ReminderView({ refreshKey }: { refreshKey: number }) {
           </li>
         ))}
       </ul>
+      {hasMore && <div ref={sentinelRef} aria-hidden="true" className="h-px" />}
+      {loadingMore && <p className="py-3 text-center text-xs text-muted">加载中…</p>}
     </>
   );
 }
