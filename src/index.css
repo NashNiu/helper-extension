@@ -26,3 +26,15 @@ body {
   background: var(--color-ground);
   color: var(--color-ink);
 }
+
+/* 个人中心整页右滑入场 */
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+.animate-slide-in-right {
+  animation: slide-in-right 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-slide-in-right { animation: none; }
+}

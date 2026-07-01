@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "./useAuth";
 import { LoginView } from "./LoginView";
+import { ProfileView } from "./ProfileView";
 import { TabBar, type TabKey } from "../components/TabBar";
 import { QuickAddBar } from "../features/QuickAddBar";
 import { ReminderView } from "../features/reminder/ReminderView";
@@ -8,10 +9,11 @@ import { TimerView } from "../features/timer/TimerView";
 import { TodoView } from "../features/todo/TodoView";
 
 export default function App() {
-  const { status, signIn, signOut } = useAuth();
+  const { user, status, signIn, signOut } = useAuth();
   const [tab, setTab] = useState<TabKey>("todo");
   const [refreshKey, setRefreshKey] = useState(0);
   const [showLogin, setShowLogin] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
 
   if (status === "loading") {
     return <div className="flex h-full items-center justify-center text-muted">加载中…</div>;
@@ -37,13 +39,13 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-ground">
+    <div className="relative flex h-full flex-col bg-ground">
       <TabBar
         value={tab}
         onChange={setTab}
         loggedIn={loggedIn}
-        onSignOut={handleSignOut}
-        onSignIn={() => setShowLogin(true)}
+        userInitial={user?.username?.slice(0, 1) ?? ""}
+        onOpenProfile={() => setShowProfile(true)}
       />
       {/* “一句话智能添加”对登录/未登录都可用：登录走后端 AI，未登录走公开 AI 接口 + 写本地。 */}
       <QuickAddBar onAdded={bump} loggedIn={loggedIn} />
@@ -52,6 +54,17 @@ export default function App() {
         {tab === "timer" && <TimerView refreshKey={refreshKey} />}
         {tab === "todo" && <TodoView refreshKey={refreshKey} />}
       </main>
+
+      {showProfile && (
+        <ProfileView
+          loggedIn={loggedIn}
+          userName={user?.username ?? ""}
+          userEmail={user?.email ?? ""}
+          onBack={() => setShowProfile(false)}
+          onSignIn={() => setShowLogin(true)}
+          onSignOut={handleSignOut}
+        />
+      )}
     </div>
   );
 }

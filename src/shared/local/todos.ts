@@ -8,11 +8,23 @@ function byCreatedDesc(a: Todo, b: Todo): number {
   return b.created_at.localeCompare(a.created_at) || b.id - a.id;
 }
 
+// 已完成按完成时间倒序;done_at 缺失时回退到创建时间。
+function byDoneDesc(a: Todo, b: Todo): number {
+  return (b.done_at ?? b.created_at).localeCompare(a.done_at ?? a.created_at) || b.id - a.id;
+}
+
 export const localTodos = {
   async listActive(offset = 0, limit = 10): Promise<Todo[]> {
     const all = (await readList<Todo>(KEY))
       .filter((t) => !t.is_done)
       .sort(byCreatedDesc);
+    return all.slice(offset, offset + limit);
+  },
+
+  async listDone(offset = 0, limit = 10): Promise<Todo[]> {
+    const all = (await readList<Todo>(KEY))
+      .filter((t) => t.is_done)
+      .sort(byDoneDesc);
     return all.slice(offset, offset + limit);
   },
 

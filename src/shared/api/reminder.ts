@@ -20,6 +20,11 @@ export const reminderApi = {
     (await hasToken())
       ? apiFetch<Reminder[]>(`/api/reminders?triggered=false&limit=${limit}&offset=${offset}`)
       : localReminders.listPending(offset, limit),
+  /** 已触发的提醒(个人中心历史),按触发时间倒序,分页拉取。 */
+  listTriggered: async (offset = 0, limit = 10) =>
+    (await hasToken())
+      ? apiFetch<Reminder[]>(`/api/reminders?triggered=true&limit=${limit}&offset=${offset}`)
+      : localReminders.listTriggered(offset, limit),
   /** 登录态:自然语言 → 后端 AI 解析创建。 */
   create: (input: string) =>
     apiFetch<Reminder>("/api/reminders", { method: "POST", json: { input } }),

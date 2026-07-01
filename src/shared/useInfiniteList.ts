@@ -14,6 +14,8 @@ export function useInfiniteList<T extends { id: number }>(
   fetchPage: (offset: number, limit: number) => Promise<T[]>,
   refreshKey: number,
   pageSize = 10,
+  /** 为 false 时不加载(用于未激活的分段,切到时再拉首屏)。 */
+  enabled = true,
 ) {
   const [items, setItems] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,8 +49,8 @@ export function useInfiniteList<T extends { id: number }>(
   }, [pageSize]);
 
   useEffect(() => {
-    void loadFirst();
-  }, [loadFirst, refreshKey]);
+    if (enabled) void loadFirst();
+  }, [loadFirst, refreshKey, enabled]);
 
   const loadMore = useCallback(async () => {
     if (busyRef.current || !hasMoreRef.current) return;

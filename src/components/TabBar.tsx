@@ -29,22 +29,11 @@ function CheckSquareIcon() {
   );
 }
 
-function LogOutIcon() {
+function PersonIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-      <polyline points="16 17 21 12 16 7" />
-      <line x1="21" y1="12" x2="9" y2="12" />
-    </svg>
-  );
-}
-
-function LogInIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-      <polyline points="10 17 15 12 10 7" />
-      <line x1="15" y1="12" x2="3" y2="12" />
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
     </svg>
   );
 }
@@ -59,14 +48,14 @@ export function TabBar({
   value,
   onChange,
   loggedIn,
-  onSignOut,
-  onSignIn,
+  userInitial,
+  onOpenProfile,
 }: {
   value: TabKey;
   onChange: (k: TabKey) => void;
   loggedIn: boolean;
-  onSignOut: () => void;
-  onSignIn: () => void;
+  userInitial: string;
+  onOpenProfile: () => void;
 }) {
   return (
     <nav className="flex items-stretch border-b border-line bg-surface">
@@ -95,25 +84,25 @@ export function TabBar({
           );
         })}
       </div>
-      {loggedIn ? (
-        <button
-          onClick={onSignOut}
-          aria-label="退出登录"
-          title="退出登录"
-          className="flex min-w-[40px] items-center justify-center border-l border-line px-3 text-muted transition hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-        >
-          <LogOutIcon />
-        </button>
-      ) : (
-        <button
-          onClick={onSignIn}
-          aria-label="登录以同步"
-          title="登录以同步"
-          className="flex min-w-[40px] items-center justify-center border-l border-line px-3 text-muted transition hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-        >
-          <LogInIcon />
-        </button>
-      )}
+      <button
+        onClick={onOpenProfile}
+        aria-label="个人中心"
+        title="个人中心"
+        className="relative flex min-w-[48px] items-center justify-center border-l border-line px-2.5 transition hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      >
+        {loggedIn ? (
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-[13px] font-bold text-white">
+            {userInitial}
+          </span>
+        ) : (
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-black/[0.06] text-muted">
+            <PersonIcon />
+          </span>
+        )}
+        {!loggedIn && (
+          <span className="absolute right-2.5 top-2 h-[7px] w-[7px] rounded-full bg-danger" aria-hidden="true" />
+        )}
+      </button>
     </nav>
   );
 }

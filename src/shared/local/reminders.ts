@@ -4,9 +4,14 @@ import { readList, writeList, nextId } from "./store";
 
 const KEY = "helper.local.reminders";
 
-// 与后端一致:按触发时间正序(近的在前)。
+// 与后端一致:待触发按触发时间正序(近的在前)。
 function byTriggerAsc(a: Reminder, b: Reminder): number {
   return a.trigger_at.localeCompare(b.trigger_at) || a.id - b.id;
+}
+
+// 历史(已触发)按触发时间倒序(最近在前)。
+function byTriggerDesc(a: Reminder, b: Reminder): number {
+  return b.trigger_at.localeCompare(a.trigger_at) || b.id - a.id;
 }
 
 // 在扩展页面/SW 中都可用;测试等无 chrome.alarms 环境下静默跳过。
@@ -37,6 +42,13 @@ export const localReminders = {
     const all = (await readList<Reminder>(KEY))
       .filter((r) => !r.is_triggered)
       .sort(byTriggerAsc);
+    return all.slice(offset, offset + limit);
+  },
+
+  async listTriggered(offset = 0, limit = 10): Promise<Reminder[]> {
+    const all = (await readList<Reminder>(KEY))
+      .filter((r) => r.is_triggered)
+      .sort(byTriggerDesc);
     return all.slice(offset, offset + limit);
   },
 

@@ -28,6 +28,11 @@ export const todoApi = {
     (await hasToken())
       ? apiFetch<Todo[]>(`/api/todos?done=false&limit=${limit}&offset=${offset}`)
       : localTodos.listActive(offset, limit),
+  /** 已完成的待办(个人中心历史),按完成时间倒序,分页拉取。 */
+  listDone: async (offset = 0, limit = 10) =>
+    (await hasToken())
+      ? apiFetch<Todo[]>(`/api/todos?done=true&limit=${limit}&offset=${offset}`)
+      : localTodos.listDone(offset, limit),
   create: async (content: string) =>
     (await hasToken()) ? remoteCreate(content) : localTodos.create(content),
   update: async (id: number, data: { content?: string; is_done?: boolean }) =>
