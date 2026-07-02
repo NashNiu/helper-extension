@@ -32,11 +32,86 @@ export function remainingSeconds(startAt: number, durationSeconds: number, now: 
   return Math.max(0, Math.round((startAt + durationSeconds * 1000 - now) / 1000));
 }
 
+export type Phase = "work" | "short_break" | "long_break";
+
+export interface PomodoroSession {
+  cycles: number;       // N,总循环数
+  cycleIndex: number;   // 1..N,当前处于第几个循环
+  phase: Phase;
+  workSec: number;
+  shortBreakSec: number;
+  longBreakSec: number;
+}
+
 export interface ActiveTimer {
   timerId: number;
-  name: string;
+  name: string;               // 当前阶段展示名
   startAt: number;
   durationSeconds: number;
-  status: "running" | "paused";
+  status: "running" | "paused" | "awaiting"; // awaiting = 到点等用户点下一步
   pausedRemaining?: number;
+  session?: PomodoroSession;  // 有则为番茄钟会话,无则为一次性计时
+}
+
+export function isLongBreakCycle(cycleIndex: number): boolean {
+  return cycleIndex % 4 === 0;
+}
+
+export function phaseDurationSec(session: PomodoroSession, phase: Phase): number {
+  if (phase === "work") return session.workSec;
+  if (phase === "long_break") return session.longBreakSec;
+  return session.shortBreakSec;
+}
+
+export function phaseLabel(phase: Phase): string {
+  if (phase === "work") return "番茄钟";
+  if (phase === "long_break") return "长休息";
+  return "短休息";
+}
+
+export interface NextStep {
+  done: boolean;
+  session: PomodoroSession;
+  phase: Phase;
+}
+
+// 计算「用户点下一步」后的下一阶段。
+export function nextStep(session: PomodoroSession): NextStep {
+  if (session.phase === "work") {
+    const phase: Phase = isLongBreakCycle(session.cycleIndex) ? "long_break" : "short_break";
+    return { done: false, phase, session: { ...session, phase } };
+  }
+  // 当前是休息
+  if (session.cycleIndex < session.cycles) {
+    const phase: Phase = "work";
+    return {
+      done: false,
+      phase,
+      session: { ...session, cycleIndex: session.cycleIndex + 1, phase },
+    };
+  }
+  return { done: true, phase: session.phase, session };
+}
+
+// 预计结束时刻(ms):当前阶段结束 + 所有剩余阶段时长之和(假设不间断)。
+export function estimatedEndAt(timer: ActiveTimer, now: number): number {
+  const currentEnd =
+    timer.status === "paused"
+      ? now + (timer.pausedRemaining ?? 0) * 1000
+      : timer.startAt + timer.durationSeconds * 1000;
+  if (!timer.session) return currentEnd;
+  let total = 0;
+  let step = nextStep(timer.session);
+  while (!step.done) {
+    total += phaseDurationSec(step.session, step.phase);
+    step = nextStep(step.session);
+  }
+  return currentEnd + total * 1000;
+}
+
+// UI 展示用剩余秒:暂停冻结、等待为 0、运行按时钟计算。
+export function displayRemaining(timer: ActiveTimer, now: number): number {
+  if (timer.status === "paused") return timer.pausedRemaining ?? 0;
+  if (timer.status === "awaiting") return 0;
+  return remainingSeconds(timer.startAt, timer.durationSeconds, now);
 }
