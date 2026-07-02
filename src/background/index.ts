@@ -4,6 +4,7 @@ import {
   TIMER_ALARM,
   planReminders,
   reminderIdFromAlarm,
+  nextStep,
 } from "./logic";
 import { reminderApi } from "../shared/api/reminder";
 import { getActiveTimer, setActiveTimer } from "../shared/activeTimer";
@@ -65,6 +66,22 @@ async function runHeartbeat() {
 async function fireTimerDone() {
   const t = await getActiveTimer();
   if (!t) return;
+  if (t.session) {
+    // 会话:置等待态,不清空,等用户在面板手动进入下一段。
+    await setActiveTimer({ ...t, status: "awaiting" });
+    if (t.session.phase === "work") {
+      await notify(TIMER_ALARM, "该休息了", `「${t.name}」完成,打开面板开始休息`);
+    } else {
+      const finished = nextStep(t.session).done;
+      await notify(
+        TIMER_ALARM,
+        finished ? "全部完成 🎉" : "休息结束",
+        finished ? "本轮番茄钟已全部完成" : "打开面板开始下一个番茄",
+      );
+    }
+    return;
+  }
+  // 一次性计时:现状——通知 + 清空。
   await notify(TIMER_ALARM, "时间到", `「${t.name}」已结束`);
   await setActiveTimer(null);
 }
