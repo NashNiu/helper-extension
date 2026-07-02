@@ -9,8 +9,8 @@ import {
 } from "../background/logic";
 import type { Timer } from "./api/timer";
 
-const SHORT_BREAK_SEC = 5 * 60;
-const LONG_BREAK_SEC = 15 * 60;
+export const SHORT_BREAK_SEC = 5 * 60;
+export const LONG_BREAK_SEC = 15 * 60;
 
 function setTimerAlarm(when: number): void {
   if (typeof chrome !== "undefined" && chrome.alarms) {
@@ -105,6 +105,15 @@ export async function resumeTimer(): Promise<void> {
     pausedRemaining: undefined,
   });
   setTimerAlarm(startAt + durationSeconds * 1000);
+}
+
+/** 重置当前阶段:从本阶段完整时长重新计时(会话或一次性均适用)。 */
+export async function restartPhase(): Promise<void> {
+  const t = await getActiveTimer();
+  if (!t) return;
+  const startAt = Date.now();
+  await setActiveTimer({ ...t, startAt, status: "running", pausedRemaining: undefined });
+  setTimerAlarm(startAt + t.durationSeconds * 1000);
 }
 
 export async function cancelTimer(): Promise<void> {

@@ -10,6 +10,7 @@ import {
   nextStep,
   estimatedEndAt,
   displayRemaining,
+  plannedTotalSeconds,
   type PomodoroSession,
   type ActiveTimer,
 } from "./logic";
@@ -86,6 +87,17 @@ describe("isLongBreakCycle", () => {
     expect(isLongBreakCycle(1)).toBe(false);
     expect(isLongBreakCycle(3)).toBe(false);
     expect(isLongBreakCycle(5)).toBe(false);
+  });
+});
+
+describe("plannedTotalSeconds", () => {
+  it("sums work + per-cycle break, long every 4th, trailing break kept", () => {
+    // cycles=4, work=1500, short=300, long=900
+    // 4*1500 + (300+300+300+900) = 6000 + 1800 = 7800
+    expect(plannedTotalSeconds(4, 1500, 300, 900)).toBe(7800);
+  });
+  it("single cycle = work + short break", () => {
+    expect(plannedTotalSeconds(1, 1500, 300, 900)).toBe(1800);
   });
 });
 

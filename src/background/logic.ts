@@ -57,6 +57,20 @@ export function isLongBreakCycle(cycleIndex: number): boolean {
   return cycleIndex % 4 === 0;
 }
 
+// 一轮完整会话的总时长(秒):N 个工作段 + 每段后的休息(每 4 轮长休息,尾部休息保留)。
+export function plannedTotalSeconds(
+  cycles: number,
+  workSec: number,
+  shortBreakSec: number,
+  longBreakSec: number,
+): number {
+  let total = 0;
+  for (let k = 1; k <= cycles; k++) {
+    total += workSec + (isLongBreakCycle(k) ? longBreakSec : shortBreakSec);
+  }
+  return total;
+}
+
 export function phaseDurationSec(session: PomodoroSession, phase: Phase): number {
   if (phase === "work") return session.workSec;
   if (phase === "long_break") return session.longBreakSec;
