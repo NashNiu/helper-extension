@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { remainingSeconds, type ActiveTimer } from "../../background/logic";
+import { displayRemaining, type ActiveTimer } from "../../background/logic";
 import { getActiveTimer } from "../../shared/activeTimer";
 
 export function useCountdown() {
@@ -9,7 +9,7 @@ export function useCountdown() {
   async function refresh() {
     const t = await getActiveTimer();
     setTimer(t);
-    if (t) setRemaining(remainingSeconds(t.startAt, t.durationSeconds, Date.now()));
+    setRemaining(t ? displayRemaining(t, Date.now()) : 0);
   }
 
   useEffect(() => {
