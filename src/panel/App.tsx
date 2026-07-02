@@ -6,6 +6,7 @@ import { TabBar, type TabKey } from "../components/TabBar";
 import { QuickAddBar } from "../features/QuickAddBar";
 import { ReminderView } from "../features/reminder/ReminderView";
 import { TimerView } from "../features/timer/TimerView";
+import { TimerWidget } from "../features/timer/TimerWidget";
 import { TodoView } from "../features/todo/TodoView";
 
 export default function App() {
@@ -54,6 +55,8 @@ export default function App() {
         {tab === "timer" && <TimerView refreshKey={refreshKey} />}
         {tab === "todo" && <TodoView refreshKey={refreshKey} />}
       </main>
+
+      {tab !== "timer" && !showProfile && <TimerWidget onOpen={() => setTab("timer")} />}
 
       {showProfile && (
         <ProfileView

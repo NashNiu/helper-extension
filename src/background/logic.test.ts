@@ -4,6 +4,15 @@ import {
   reminderIdFromAlarm,
   remainingSeconds,
   REMINDER_ALARM_PREFIX,
+  isLongBreakCycle,
+  phaseDurationSec,
+  phaseLabel,
+  nextStep,
+  estimatedEndAt,
+  displayRemaining,
+  plannedTotalSeconds,
+  type PomodoroSession,
+  type ActiveTimer,
 } from "./logic";
 
 const r = (id: number, iso: string) => ({
@@ -57,4 +66,133 @@ describe("remainingSeconds", () => {
   const now = 10_000;
   it("computes remaining", () => expect(remainingSeconds(0, 30, now)).toBe(20));
   it("never negative", () => expect(remainingSeconds(0, 5, now)).toBe(0));
+});
+
+const sess = (over: Partial<PomodoroSession> = {}): PomodoroSession => ({
+  cycles: 4,
+  cycleIndex: 1,
+  phase: "work",
+  workSec: 1500,
+  shortBreakSec: 300,
+  longBreakSec: 900,
+  ...over,
+});
+
+describe("isLongBreakCycle", () => {
+  it("true on every 4th", () => {
+    expect(isLongBreakCycle(4)).toBe(true);
+    expect(isLongBreakCycle(8)).toBe(true);
+  });
+  it("false otherwise", () => {
+    expect(isLongBreakCycle(1)).toBe(false);
+    expect(isLongBreakCycle(3)).toBe(false);
+    expect(isLongBreakCycle(5)).toBe(false);
+  });
+});
+
+describe("plannedTotalSeconds", () => {
+  it("sums work + per-cycle break, long every 4th, trailing break kept", () => {
+    // cycles=4, work=1500, short=300, long=900
+    // 4*1500 + (300+300+300+900) = 6000 + 1800 = 7800
+    expect(plannedTotalSeconds(4, 1500, 300, 900)).toBe(7800);
+  });
+  it("single cycle = work + short break", () => {
+    expect(plannedTotalSeconds(1, 1500, 300, 900)).toBe(1800);
+  });
+});
+
+describe("phaseDurationSec / phaseLabel", () => {
+  const s = sess();
+  it("maps duration", () => {
+    expect(phaseDurationSec(s, "work")).toBe(1500);
+    expect(phaseDurationSec(s, "short_break")).toBe(300);
+    expect(phaseDurationSec(s, "long_break")).toBe(900);
+  });
+  it("maps label", () => {
+    expect(phaseLabel("work")).toBe("番茄钟");
+    expect(phaseLabel("short_break")).toBe("短休息");
+    expect(phaseLabel("long_break")).toBe("长休息");
+  });
+});
+
+describe("nextStep", () => {
+  it("work → short break (non-4th cycle)", () => {
+    const out = nextStep(sess({ cycleIndex: 1, phase: "work" }));
+    expect(out.done).toBe(false);
+    expect(out.phase).toBe("short_break");
+    expect(out.session.cycleIndex).toBe(1);
+  });
+  it("work → long break (4th cycle)", () => {
+    const out = nextStep(sess({ cycleIndex: 4, phase: "work" }));
+    expect(out.phase).toBe("long_break");
+  });
+  it("break → next work when cycles remain", () => {
+    const out = nextStep(sess({ cycles: 4, cycleIndex: 1, phase: "short_break" }));
+    expect(out.done).toBe(false);
+    expect(out.phase).toBe("work");
+    expect(out.session.cycleIndex).toBe(2);
+  });
+  it("break → done on final cycle", () => {
+    const out = nextStep(sess({ cycles: 2, cycleIndex: 2, phase: "short_break" }));
+    expect(out.done).toBe(true);
+  });
+});
+
+describe("estimatedEndAt", () => {
+  it("running with session sums remaining phases", () => {
+    const now = 0;
+    const timer: ActiveTimer = {
+      timerId: 1,
+      name: "番茄钟",
+      startAt: 0,
+      durationSeconds: 1500,
+      status: "running",
+      session: sess({ cycles: 1, cycleIndex: 1, phase: "work" }),
+    };
+    // 序列 W(1500) S(300);当前 W 结束在 1500s,余下 short 300s
+    expect(estimatedEndAt(timer, now)).toBe((1500 + 300) * 1000);
+  });
+  it("paused uses pausedRemaining for current phase end", () => {
+    const now = 10_000;
+    const timer: ActiveTimer = {
+      timerId: 1,
+      name: "番茄钟",
+      startAt: 0,
+      durationSeconds: 1500,
+      status: "paused",
+      pausedRemaining: 600,
+      session: sess({ cycles: 1, cycleIndex: 1, phase: "work" }),
+    };
+    // 当前阶段结束 = now + 600s;余下 short 300s
+    expect(estimatedEndAt(timer, now)).toBe(now + (600 + 300) * 1000);
+  });
+  it("no session returns current phase end", () => {
+    const timer: ActiveTimer = {
+      timerId: 5,
+      name: "专注",
+      startAt: 1000,
+      durationSeconds: 60,
+      status: "running",
+    };
+    expect(estimatedEndAt(timer, 0)).toBe(1000 + 60 * 1000);
+  });
+});
+
+describe("displayRemaining", () => {
+  const base: ActiveTimer = {
+    timerId: 1,
+    name: "番茄钟",
+    startAt: 0,
+    durationSeconds: 30,
+    status: "running",
+  };
+  it("running computes from clock", () => {
+    expect(displayRemaining(base, 10_000)).toBe(20);
+  });
+  it("paused returns pausedRemaining", () => {
+    expect(displayRemaining({ ...base, status: "paused", pausedRemaining: 12 }, 999_999)).toBe(12);
+  });
+  it("awaiting returns 0", () => {
+    expect(displayRemaining({ ...base, status: "awaiting" }, 0)).toBe(0);
+  });
 });
