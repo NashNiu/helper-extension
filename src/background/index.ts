@@ -31,6 +31,8 @@ async function notify(id: string, title: string, message: string) {
     title,
     message,
     priority: 2,
+    // 常驻直到用户处理,避免横幅一闪而过被错过。
+    requireInteraction: true,
   });
 }
 
@@ -66,15 +68,17 @@ async function runHeartbeat() {
 async function fireTimerDone() {
   const t = await getActiveTimer();
   if (!t) return;
+  // 每次到点用唯一 id:同一固定 id 会被系统当作「更新」而不重新弹横幅。
+  const nid = `${TIMER_ALARM}:${Date.now()}`;
   if (t.session) {
     // 会话:置等待态,不清空,等用户在面板手动进入下一段。
     await setActiveTimer({ ...t, status: "awaiting" });
     if (t.session.phase === "work") {
-      await notify(TIMER_ALARM, "该休息了", `「${t.name}」完成,打开面板开始休息`);
+      await notify(nid, "该休息了", `「${t.name}」完成,打开面板开始休息`);
     } else {
       const finished = nextStep(t.session).done;
       await notify(
-        TIMER_ALARM,
+        nid,
         finished ? "全部完成 🎉" : "休息结束",
         finished ? "本轮番茄钟已全部完成" : "打开面板开始下一个番茄",
       );
@@ -82,7 +86,7 @@ async function fireTimerDone() {
     return;
   }
   // 一次性计时:现状——通知 + 清空。
-  await notify(TIMER_ALARM, "时间到", `「${t.name}」已结束`);
+  await notify(nid, "时间到", `「${t.name}」已结束`);
   await setActiveTimer(null);
 }
 
