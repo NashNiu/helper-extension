@@ -99,9 +99,6 @@ export function TabBar({
             <PersonIcon />
           </span>
         )}
-        {!loggedIn && (
-          <span className="absolute right-2.5 top-2 h-[7px] w-[7px] rounded-full bg-danger" aria-hidden="true" />
-        )}
       </button>
     </nav>
   );
