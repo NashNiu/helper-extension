@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "../components/Button";
 import { Input } from "../components/Input";
 import { ApiError } from "../shared/http";
+import { useT } from "../i18n/react";
 
 const WEB_URL = "https://helper-blond.vercel.app/register";
 
@@ -12,6 +13,7 @@ export function LoginView({
   onLogin: (id: string, pw: string) => Promise<void>;
   onCancel?: () => void;
 }) {
+  const t = useT();
   const [id, setId] = useState("");
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
@@ -23,7 +25,7 @@ export function LoginView({
     try {
       await onLogin(id.trim(), pw);
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "登录失败");
+      setErr(e instanceof ApiError ? e.message : t("login.failed"));
     } finally {
       setBusy(false);
     }
@@ -31,23 +33,23 @@ export function LoginView({
 
   return (
     <div className="flex h-full flex-col justify-center gap-3 bg-ground p-6">
-      <h1 className="text-lg font-semibold text-ink">登录 Helper</h1>
-      <p className="-mt-1 text-xs text-muted">登录后数据可在多设备间同步；不登录也能在本机使用。</p>
-      <Input placeholder="用户名或邮箱" value={id} onChange={(e) => setId(e.target.value)} />
+      <h1 className="text-lg font-semibold text-ink">{t("login.title")}</h1>
+      <p className="-mt-1 text-xs text-muted">{t("login.subtitle")}</p>
+      <Input placeholder={t("login.idPlaceholder")} value={id} onChange={(e) => setId(e.target.value)} />
       <Input
         type="password"
-        placeholder="密码"
+        placeholder={t("login.pwPlaceholder")}
         value={pw}
         onChange={(e) => setPw(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && submit()}
       />
       {err && <p className="text-sm text-danger">{err}</p>}
       <Button onClick={submit} disabled={busy || !id || !pw} className="w-full">
-        {busy ? "登录中…" : "登录"}
+        {busy ? t("login.submitting") : t("login.submit")}
       </Button>
       {onCancel && (
         <Button variant="ghost" onClick={onCancel} disabled={busy} className="w-full">
-          先不登录，本地使用
+          {t("login.useLocal")}
         </Button>
       )}
       <a
@@ -56,7 +58,7 @@ export function LoginView({
         rel="noreferrer"
         className="text-center text-xs text-muted hover:text-accent-ink transition"
       >
-        没有账号？去网页版注册
+        {t("login.register")}
       </a>
     </div>
   );

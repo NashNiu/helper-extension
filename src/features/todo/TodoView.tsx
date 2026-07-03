@@ -3,6 +3,7 @@ import { todoApi, type Todo } from "../../shared/api/todo";
 import { Input } from "../../components/Input";
 import { Loading } from "../../components/Loading";
 import { useInfiniteList } from "../../shared/useInfiniteList";
+import { useT } from "../../i18n/react";
 
 const iconBtn =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-black/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40";
@@ -47,6 +48,7 @@ function XIcon() {
 }
 
 export function TodoView({ refreshKey }: { refreshKey: number }) {
+  const tr = useT();
   const fetchPage = useCallback(
     (offset: number, limit: number) => todoApi.listActive(offset, limit),
     [],
@@ -64,7 +66,7 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
       setItems((xs) => xs.filter((x) => x.id !== t.id));
       setErr("");
     } catch {
-      setErr("操作失败");
+      setErr(tr("err.actionFailed"));
     }
   }
 
@@ -74,7 +76,7 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
       setItems((xs) => xs.filter((x) => x.id !== id));
       setErr("");
     } catch {
-      setErr("删除失败");
+      setErr(tr("err.deleteFailed"));
     }
   }
 
@@ -100,7 +102,7 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
       cancelEdit();
       setErr("");
     } catch {
-      setErr("保存失败");
+      setErr(tr("err.saveFailed"));
     }
   }
 
@@ -117,7 +119,7 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
       {loading ? (
         <Loading />
       ) : visible.length === 0 ? (
-        <p className="p-4 text-center text-muted">暂无待办</p>
+        <p className="p-4 text-center text-muted">{tr("todo.empty")}</p>
       ) : (
         <ul>
           {visible.map((t) => {
@@ -130,7 +132,7 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
                   onChange={() => complete(t)}
                   disabled={editing}
                   className="h-4 w-4 shrink-0 accent-accent disabled:opacity-40"
-                  aria-label={`完成「${t.content}」`}
+                  aria-label={tr("todo.completeAria", { content: t.content })}
                 />
                 {editing ? (
                   <>
@@ -143,12 +145,12 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
                         else if (e.key === "Escape") cancelEdit();
                       }}
                       className="min-w-0 flex-1 py-1"
-                      aria-label="编辑内容"
+                      aria-label={tr("todo.editAria")}
                     />
-                    <button onClick={() => void saveEdit(t)} aria-label="保存" className={iconBtnAccent}>
+                    <button onClick={() => void saveEdit(t)} aria-label={tr("action.save")} className={iconBtnAccent}>
                       <CheckIcon />
                     </button>
-                    <button onClick={cancelEdit} aria-label="取消" className={iconBtn}>
+                    <button onClick={cancelEdit} aria-label={tr("action.cancel")} className={iconBtn}>
                       <XIcon />
                     </button>
                   </>
@@ -157,10 +159,10 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
                     <span className="min-w-0 flex-1 break-words text-sm leading-relaxed text-ink">
                       {t.content}
                     </span>
-                    <button onClick={() => startEdit(t)} aria-label="编辑" title="编辑" className={iconBtn}>
+                    <button onClick={() => startEdit(t)} aria-label={tr("action.edit")} title={tr("action.edit")} className={iconBtn}>
                       <PencilIcon />
                     </button>
-                    <button onClick={() => remove(t.id)} aria-label="删除" title="删除" className={iconBtnDanger}>
+                    <button onClick={() => remove(t.id)} aria-label={tr("action.delete")} title={tr("action.delete")} className={iconBtnDanger}>
                       <TrashIcon />
                     </button>
                   </>
@@ -171,7 +173,7 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
         </ul>
       )}
       {hasMore && <div ref={sentinelRef} aria-hidden="true" className="h-px" />}
-      {loadingMore && <p className="py-3 text-center text-xs text-muted">加载中…</p>}
+      {loadingMore && <p className="py-3 text-center text-xs text-muted">{tr("common.loading")}</p>}
     </>
   );
 }
