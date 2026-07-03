@@ -8,10 +8,17 @@ import {
 } from "./logic";
 import { reminderApi } from "../shared/api/reminder";
 import { getActiveTimer, setActiveTimer } from "../shared/activeTimer";
+import { LOCALE_KEY, detectSystemLocale, resolveLocale, translate, type Locale, type LocalePref } from "../i18n/core";
+import { storageGet } from "../shared/storage";
 
 const ICON = "icon-128.png";
 // 心跳/触发时需拿到全部待触发提醒(而非分页的前 10 条),故取一个较大的上限。
 const SCHEDULE_LIMIT = 500;
+
+async function currentLocale(): Promise<Locale> {
+  const pref = (await storageGet<LocalePref>(LOCALE_KEY)) ?? "system";
+  return resolveLocale(pref, detectSystemLocale());
+}
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel
@@ -42,7 +49,8 @@ async function fireReminder(reminderId: number) {
     const pending = await reminderApi.listPending(0, SCHEDULE_LIMIT);
     const r = pending.find((x) => x.id === reminderId);
     if (!r) return; // 已被删除/触发
-    await notify(`${REMINDER_ALARM_PREFIX}${r.id}`, "提醒", r.message);
+    const loc = await currentLocale();
+    await notify(`${REMINDER_ALARM_PREFIX}${r.id}`, translate(loc, "notify.reminderTitle"), r.message);
     await reminderApi.markTriggered(r.id);
   } catch (e) {
     console.error("fireReminder failed", e);
@@ -53,8 +61,9 @@ async function runHeartbeat() {
   try {
     const pending = await reminderApi.listPending(0, SCHEDULE_LIMIT);
     const { dueNow, toSchedule } = planReminders(pending, Date.now());
+    const loc = await currentLocale();
     for (const r of dueNow) {
-      await notify(`${REMINDER_ALARM_PREFIX}${r.id}`, "提醒", r.message);
+      await notify(`${REMINDER_ALARM_PREFIX}${r.id}`, translate(loc, "notify.reminderTitle"), r.message);
       await reminderApi.markTriggered(r.id);
     }
     for (const s of toSchedule) {
@@ -68,25 +77,30 @@ async function runHeartbeat() {
 async function fireTimerDone() {
   const t = await getActiveTimer();
   if (!t) return;
+  const loc = await currentLocale();
   // 每次到点用唯一 id:同一固定 id 会被系统当作「更新」而不重新弹横幅。
   const nid = `${TIMER_ALARM}:${Date.now()}`;
   if (t.session) {
     // 会话:置等待态,不清空,等用户在面板手动进入下一段。
     await setActiveTimer({ ...t, status: "awaiting" });
     if (t.session.phase === "work") {
-      await notify(nid, "该休息了", `「${t.name}」完成,打开面板开始休息`);
+      await notify(
+        nid,
+        translate(loc, "notify.breakTitle"),
+        translate(loc, "notify.breakBody", { name: translate(loc, "timer.preset.pomodoro") }),
+      );
     } else {
       const finished = nextStep(t.session).done;
       await notify(
         nid,
-        finished ? "全部完成 🎉" : "休息结束",
-        finished ? "本轮番茄钟已全部完成" : "打开面板开始下一个番茄",
+        finished ? translate(loc, "notify.allDoneTitle") : translate(loc, "notify.breakOverTitle"),
+        finished ? translate(loc, "notify.allDoneBody") : translate(loc, "notify.breakOverBody"),
       );
     }
     return;
   }
   // 一次性计时:现状——通知 + 清空。
-  await notify(nid, "时间到", `「${t.name}」已结束`);
+  await notify(nid, translate(loc, "notify.timeUp"), translate(loc, "notify.timerEnded", { name: t.name }));
   await setActiveTimer(null);
 }
 
