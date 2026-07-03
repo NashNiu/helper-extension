@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { todoApi, type Todo } from "../shared/api/todo";
 import { reminderApi, type Reminder } from "../shared/api/reminder";
 import { formatDateTime } from "../shared/datetime";
@@ -7,6 +7,7 @@ import { Loading } from "../components/Loading";
 import { useInfiniteList } from "../shared/useInfiniteList";
 import { useT, useLocale } from "../i18n/react";
 import type { LocalePref } from "../i18n/core";
+import type { MessageKey } from "../i18n/messages/en";
 
 type Seg = "todos" | "reminders";
 
@@ -154,6 +155,94 @@ function TriggeredReminderList({ active }: { active: boolean }) {
   );
 }
 
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+      className={`transition-transform ${open ? "rotate-180" : ""}`}
+    >
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+const LANG_OPTIONS: { value: LocalePref; labelKey?: MessageKey; label?: string }[] = [
+  { value: "system", labelKey: "profile.langSystem" },
+  { value: "zh-Hans", label: "简体中文" },
+  { value: "zh-Hant", label: "繁體中文" },
+  { value: "en", label: "English" },
+];
+
+/** 自定义语言下拉:原生 select 的选项列表由系统渲染、无法配色,故换成可主题化的弹层。 */
+function LanguageSelect() {
+  const t = useT();
+  const { pref, setPref } = useLocale();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const labelFor = (o: (typeof LANG_OPTIONS)[number]) => (o.labelKey ? t(o.labelKey) : o.label!);
+  const current = LANG_OPTIONS.find((o) => o.value === pref) ?? LANG_OPTIONS[0];
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={t("profile.language")}
+        className="flex items-center gap-1.5 rounded-lg border border-line bg-ground px-2.5 py-1.5 text-sm text-ink transition hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      >
+        {labelFor(current)}
+        <ChevronIcon open={open} />
+      </button>
+      {open && (
+        <ul
+          role="listbox"
+          className="absolute right-0 top-full z-10 mt-1 min-w-[150px] overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-lg"
+        >
+          {LANG_OPTIONS.map((o) => {
+            const selected = o.value === pref;
+            return (
+              <li key={o.value} role="option" aria-selected={selected}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPref(o.value);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition hover:bg-black/[0.04] ${
+                    selected ? "font-semibold text-accent-ink" : "text-ink"
+                  }`}
+                >
+                  <span>{labelFor(o)}</span>
+                  {selected && <CheckIcon />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function ProfileView({
   loggedIn,
   userName,
@@ -173,7 +262,6 @@ export function ProfileView({
 }) {
   const [seg, setSeg] = useState<Seg>("todos");
   const t = useT();
-  const { pref, setPref } = useLocale();
 
   return (
     <div className="animate-slide-in-right absolute inset-0 z-20 flex h-full flex-col bg-ground">
@@ -241,17 +329,7 @@ export function ProfileView({
         {/* 语言选择器 */}
         <div className="mt-3 flex items-center justify-between rounded-2xl border border-line bg-surface px-4 py-3">
           <span className="text-sm text-ink">{t("profile.language")}</span>
-          <select
-            value={pref}
-            onChange={(e) => setPref(e.target.value as LocalePref)}
-            className="rounded-lg border border-line bg-ground px-2 py-1 text-sm text-ink focus:border-accent focus:outline-none"
-            aria-label={t("profile.language")}
-          >
-            <option value="system">{t("profile.langSystem")}</option>
-            <option value="zh-Hans">简体中文</option>
-            <option value="zh-Hant">繁體中文</option>
-            <option value="en">English</option>
-          </select>
+          <LanguageSelect />
         </div>
 
         {/* 分段：已完成待办 / 历史提醒 */}
