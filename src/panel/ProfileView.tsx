@@ -110,7 +110,7 @@ function DoneTodoList({ active, onChanged }: { active: boolean; onChanged: () =>
             <button onClick={() => void restore(t.id)} aria-label={tr("profile.restoreAria", { content: t.content })} title={tr("profile.restore")} className={doneIconBtn}>
               <RestoreIcon />
             </button>
-            <button onClick={() => void remove(t.id)} aria-label={tr("profile.deleteAria", { content: t.content })} title={tr("profile.restore")} className={doneIconBtnDanger}>
+            <button onClick={() => void remove(t.id)} aria-label={tr("profile.deleteAria", { content: t.content })} title={tr("action.delete")} className={doneIconBtnDanger}>
               <TrashIcon />
             </button>
           </div>
