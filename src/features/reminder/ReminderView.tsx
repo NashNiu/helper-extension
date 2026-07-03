@@ -4,6 +4,7 @@ import { formatDateTime } from "../../shared/datetime";
 import { Button } from "../../components/Button";
 import { Loading } from "../../components/Loading";
 import { useInfiniteList } from "../../shared/useInfiniteList";
+import { useT } from "../../i18n/react";
 
 function BellIcon() {
   return (
@@ -15,6 +16,7 @@ function BellIcon() {
 }
 
 export function ReminderView({ refreshKey }: { refreshKey: number }) {
+  const t = useT();
   const fetchPage = useCallback(
     (offset: number, limit: number) => reminderApi.listPending(offset, limit),
     [],
@@ -27,7 +29,7 @@ export function ReminderView({ refreshKey }: { refreshKey: number }) {
       await reminderApi.remove(id);
       setItems((xs) => xs.filter((x) => x.id !== id));
     } catch {
-      setErr("删除失败");
+      setErr(t("err.deleteFailed"));
     }
   }
 
@@ -41,10 +43,10 @@ export function ReminderView({ refreshKey }: { refreshKey: number }) {
       {loading ? (
         <Loading />
       ) : items.length === 0 ? (
-        <p className="p-4 text-center text-muted">暂无待触发的提醒</p>
+        <p className="p-4 text-center text-muted">{t("reminder.empty")}</p>
       ) : (
         <>
-          <p className="px-4 pt-3 pb-1 text-xs text-muted">待触发的提醒</p>
+          <p className="px-4 pt-3 pb-1 text-xs text-muted">{t("reminder.pendingHeader")}</p>
           <ul>
             {items.map((r) => (
               <li key={r.id} className="flex items-start gap-3 border-b border-line px-4 py-3">
@@ -56,7 +58,7 @@ export function ReminderView({ refreshKey }: { refreshKey: number }) {
                   <p className="tabular-nums text-xs text-muted">{formatDateTime(r.trigger_at)}</p>
                 </div>
                 <Button variant="danger" onClick={() => remove(r.id)} className="shrink-0">
-                  删除
+                  {t("action.delete")}
                 </Button>
               </li>
             ))}
@@ -64,7 +66,7 @@ export function ReminderView({ refreshKey }: { refreshKey: number }) {
         </>
       )}
       {hasMore && <div ref={sentinelRef} aria-hidden="true" className="h-px" />}
-      {loadingMore && <p className="py-3 text-center text-xs text-muted">加载中…</p>}
+      {loadingMore && <p className="py-3 text-center text-xs text-muted">{t("common.loading")}</p>}
     </>
   );
 }

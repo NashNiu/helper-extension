@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../components/Button";
 import { Input } from "../components/Input";
+import { useT } from "../i18n/react";
+import type { MessageKey } from "../i18n/messages/en";
 import { classifyApi } from "../shared/api/classify";
 import { publicAiApi } from "../shared/api/publicAi";
 import { reminderApi } from "../shared/api/reminder";
@@ -9,8 +11,6 @@ import { todoApi } from "../shared/api/todo";
 import { startTimer } from "../shared/timerControl";
 import { ApiError } from "../shared/http";
 import { routeQuickAdd, type QuickAddDeps } from "./quickAdd";
-
-const LABELS: Record<string, string> = { reminder: "提醒", timer: "计时", todo: "待办" };
 
 type HintKind = "ok" | "warn" | "error";
 
@@ -52,6 +52,7 @@ export function QuickAddBar({
   onAdded: () => void;
   loggedIn: boolean;
 }) {
+  const t = useT();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [hint, setHint] = useState("");
@@ -94,21 +95,22 @@ export function QuickAddBar({
       const handled = await routeQuickAdd(input, deps);
       if (handled.length === 0) {
         setHintKind("warn");
-        setHint("未识别为提醒 / 计时 / 待办，换个说法试试");
+        setHint(t("quickAdd.unrecognized"));
       } else {
         setText("");
         setHintKind("ok");
-        setHint(`已添加：${handled.map((h) => LABELS[h]).join("、")}`);
+        const items = handled.map((h) => t(("tab." + h) as MessageKey)).join(t("common.listSep"));
+        setHint(t("quickAdd.added", { items }));
         onAdded();
       }
     } catch (e) {
       setHintKind("error");
       if (e instanceof ApiError && e.status === 0) {
-        setHint("网络不给力，请检查连接后重试");
+        setHint(t("quickAdd.errNetwork"));
       } else if (e instanceof ApiError && e.status === 429) {
-        setHint("操作太频繁了，请稍后再试");
+        setHint(t("quickAdd.errRateLimited"));
       } else {
-        setHint("没能添加成功，请稍后再试");
+        setHint(t("quickAdd.errGeneric"));
       }
     } finally {
       setBusy(false);
@@ -137,7 +139,7 @@ export function QuickAddBar({
         <Input
           ref={inputRef}
           className="min-w-0"
-          placeholder="一句话添加…"
+          placeholder={t("quickAdd.placeholder")}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && submit()}
@@ -151,7 +153,7 @@ export function QuickAddBar({
           {busy ? "…" : (
             <>
               <PlusIcon />
-              添加
+              {t("quickAdd.add")}
             </>
           )}
         </Button>

@@ -7,11 +7,20 @@ import {
 } from "../../shared/timerControl";
 import { useCountdown } from "./useCountdown";
 import { Button } from "../../components/Button";
+import { useT } from "../../i18n/react";
+import type { MessageKey } from "../../i18n/messages/en";
 
 function fmt(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function localPresetKey(id: number): MessageKey | null {
+  if (id === -1) return "timer.preset.pomodoro";
+  if (id === -2) return "timer.preset.shortBreak";
+  if (id === -3) return "timer.preset.longBreak";
+  return null;
 }
 
 function FlameIcon() {
@@ -48,6 +57,7 @@ const smOutline = "border border-line px-2 py-1 text-xs";
 
 /** 悬浮计时小组件:计时进行时,在非「计时」标签页展示进度与快捷控制;点主体切回计时页。 */
 export function TimerWidget({ onOpen }: { onOpen: () => void }) {
+  const t = useT();
   const { timer, remaining, refresh } = useCountdown();
   if (!timer) return null;
 
@@ -65,9 +75,9 @@ export function TimerWidget({ onOpen }: { onOpen: () => void }) {
   };
 
   const title = session
-    ? `第 ${session.cycleIndex}/${session.cycles} 轮 · ${isWork ? "工作" : "休息"}`
-    : timer.name;
-  const timeText = awaiting ? (finished ? "全部完成" : "阶段完成") : fmt(remaining);
+    ? t("widget.title", { current: session.cycleIndex, total: session.cycles, phase: t(isWork ? "widget.work" : "widget.break") })
+    : (() => { const k = localPresetKey(timer.timerId); return k ? t(k) : timer.name; })();
+  const timeText = awaiting ? (finished ? t("widget.allDone") : t("widget.phaseDone")) : fmt(remaining);
   const timeColor = paused ? "text-muted" : isWork ? "text-ink" : "text-accent";
   const Icon = finished ? ClockIcon : isWork ? FlameIcon : CupIcon;
   const iconColor = isWork ? "text-danger" : "text-accent";
@@ -75,7 +85,7 @@ export function TimerWidget({ onOpen }: { onOpen: () => void }) {
   return (
     <button
       onClick={onOpen}
-      aria-label="打开计时"
+      aria-label={t("widget.openAria")}
       className="absolute bottom-3 right-3 z-30 flex min-w-[210px] max-w-[calc(100%-1.5rem)] items-center gap-2.5 rounded-2xl border border-line bg-surface px-3 py-2.5 text-left shadow-xl transition hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
     >
       <span className={`shrink-0 ${iconColor}`}>
@@ -88,22 +98,22 @@ export function TimerWidget({ onOpen }: { onOpen: () => void }) {
       <span className="flex shrink-0 flex-col gap-1">
         {running && (
           <Button className={smBtn} onClick={act(pauseTimer)}>
-            暂停
+            {t("timer.pause")}
           </Button>
         )}
         {paused && (
           <Button className={smBtn} onClick={act(resumeTimer)}>
-            继续
+            {t("timer.resume")}
           </Button>
         )}
         {(running || paused) && (
           <Button variant="ghost" className={smOutline} onClick={act(restartPhase)}>
-            重置
+            {t("timer.reset")}
           </Button>
         )}
         {awaiting && (
           <Button className={smBtn} onClick={act(advancePhase)}>
-            {finished ? "完成" : "下一步"}
+            {finished ? t("timer.finish") : t("widget.next")}
           </Button>
         )}
       </span>

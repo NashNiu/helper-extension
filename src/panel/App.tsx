@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useT } from "../i18n/react";
 import { useAuth } from "./useAuth";
 import { LoginView } from "./LoginView";
 import { ProfileView } from "./ProfileView";
@@ -10,6 +11,7 @@ import { TimerWidget } from "../features/timer/TimerWidget";
 import { TodoView } from "../features/todo/TodoView";
 
 export default function App() {
+  const t = useT();
   const { user, status, signIn, signOut } = useAuth();
   const [tab, setTab] = useState<TabKey>("todo");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -17,7 +19,7 @@ export default function App() {
   const [showProfile, setShowProfile] = useState(false);
 
   if (status === "loading") {
-    return <div className="flex h-full items-center justify-center text-muted">加载中…</div>;
+    return <div className="flex h-full items-center justify-center text-muted">{t("common.loading")}</div>;
   }
 
   const loggedIn = status === "in";
@@ -66,6 +68,7 @@ export default function App() {
           onBack={() => setShowProfile(false)}
           onSignIn={() => setShowLogin(true)}
           onSignOut={handleSignOut}
+          onChanged={bump}
         />
       )}
     </div>
