@@ -103,13 +103,25 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (rid !== null) void fireReminder(rid);
 });
 
-// 点击任意通知 → 打开侧边栏（需在用户手势上下文之外尽力打开当前窗口）
+// 点击通知 → 打开应用。优先侧边栏;但 MV3 里从通知点击打开侧边栏受「用户手势」
+// 限制(取窗口 id 的异步调用会消耗手势),常会失败,故失败时退回用弹窗打开面板页,
+// 保证点通知一定能进入应用。
 chrome.notifications.onClicked.addListener((id) => {
   chrome.notifications.clear(id);
   chrome.windows
-    .getCurrent()
+    .getLastFocused()
     .then((w) => {
-      if (w.id !== undefined) chrome.sidePanel.open({ windowId: w.id }).catch(() => {});
+      if (w.id === undefined) throw new Error("no window");
+      return chrome.sidePanel.open({ windowId: w.id });
     })
-    .catch(() => {});
+    .catch(() =>
+      chrome.windows
+        .create({
+          url: chrome.runtime.getURL("src/panel/index.html"),
+          type: "popup",
+          width: 420,
+          height: 680,
+        })
+        .catch(() => {}),
+    );
 });
