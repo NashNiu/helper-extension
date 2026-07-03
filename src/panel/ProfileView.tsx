@@ -5,6 +5,8 @@ import { formatDateTime } from "../shared/datetime";
 import { Button } from "../components/Button";
 import { Loading } from "../components/Loading";
 import { useInfiniteList } from "../shared/useInfiniteList";
+import { useT, useLocale } from "../i18n/react";
+import type { LocalePref } from "../i18n/core";
 
 type Seg = "todos" | "reminders";
 
@@ -59,6 +61,7 @@ function TrashIcon() {
 
 /** 已完成待办列表（触底分页;可恢复为未完成、可删除）。 */
 function DoneTodoList({ active, onChanged }: { active: boolean; onChanged: () => void }) {
+  const tr = useT();
   const { items, setItems, loading, loadingMore, hasMore, err, setErr, sentinelRef } =
     useInfiniteList<Todo>((offset, limit) => todoApi.listDone(offset, limit), 0, 10, active);
 
@@ -70,7 +73,7 @@ function DoneTodoList({ active, onChanged }: { active: boolean; onChanged: () =>
       setErr("");
       onChanged();
     } catch {
-      setErr("恢复失败");
+      setErr(tr("err.restoreFailed"));
     }
   }
 
@@ -80,14 +83,14 @@ function DoneTodoList({ active, onChanged }: { active: boolean; onChanged: () =>
       setItems((xs) => xs.filter((x) => x.id !== id));
       setErr("");
     } catch {
-      setErr("删除失败");
+      setErr(tr("err.deleteFailed"));
     }
   }
 
   if (!active) return null;
   if (loading) return <Loading />;
   if (err) return <p className="p-4 text-center text-sm text-danger">{err}</p>;
-  if (items.length === 0) return <p className="p-8 text-center text-muted">还没有已完成的待办</p>;
+  if (items.length === 0) return <p className="p-8 text-center text-muted">{tr("profile.noDoneTodos")}</p>;
   return (
     <div className="overflow-hidden rounded-xl border border-line bg-surface">
       {items.map((t) => (
@@ -104,23 +107,24 @@ function DoneTodoList({ active, onChanged }: { active: boolean; onChanged: () =>
             )}
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            <button onClick={() => void restore(t.id)} aria-label={`恢复「${t.content}」为未完成`} title="恢复" className={doneIconBtn}>
+            <button onClick={() => void restore(t.id)} aria-label={tr("profile.restoreAria", { content: t.content })} title={tr("profile.restore")} className={doneIconBtn}>
               <RestoreIcon />
             </button>
-            <button onClick={() => void remove(t.id)} aria-label={`删除「${t.content}」`} title="删除" className={doneIconBtnDanger}>
+            <button onClick={() => void remove(t.id)} aria-label={tr("profile.deleteAria", { content: t.content })} title={tr("profile.restore")} className={doneIconBtnDanger}>
               <TrashIcon />
             </button>
           </div>
         </div>
       ))}
       {hasMore && <div ref={sentinelRef} aria-hidden="true" className="h-px" />}
-      {loadingMore && <p className="py-3 text-center text-xs text-muted">加载中…</p>}
+      {loadingMore && <p className="py-3 text-center text-xs text-muted">{tr("common.loading")}</p>}
     </div>
   );
 }
 
 /** 已触发（历史）提醒列表（纯查看 + 触底分页）。 */
 function TriggeredReminderList({ active }: { active: boolean }) {
+  const t = useT();
   const { items, loading, loadingMore, hasMore, err, sentinelRef } = useInfiniteList<Reminder>(
     (offset, limit) => reminderApi.listTriggered(offset, limit),
     0,
@@ -130,7 +134,7 @@ function TriggeredReminderList({ active }: { active: boolean }) {
   if (!active) return null;
   if (loading) return <Loading />;
   if (err) return <p className="p-4 text-center text-sm text-danger">{err}</p>;
-  if (items.length === 0) return <p className="p-8 text-center text-muted">还没有历史提醒</p>;
+  if (items.length === 0) return <p className="p-8 text-center text-muted">{t("profile.noReminders")}</p>;
   return (
     <div className="overflow-hidden rounded-xl border border-line bg-surface">
       {items.map((r) => (
@@ -145,7 +149,7 @@ function TriggeredReminderList({ active }: { active: boolean }) {
         </div>
       ))}
       {hasMore && <div ref={sentinelRef} aria-hidden="true" className="h-px" />}
-      {loadingMore && <p className="py-3 text-center text-xs text-muted">加载中…</p>}
+      {loadingMore && <p className="py-3 text-center text-xs text-muted">{t("common.loading")}</p>}
     </div>
   );
 }
@@ -168,18 +172,20 @@ export function ProfileView({
   onChanged: () => void;
 }) {
   const [seg, setSeg] = useState<Seg>("todos");
+  const t = useT();
+  const { pref, setPref } = useLocale();
 
   return (
     <div className="animate-slide-in-right absolute inset-0 z-20 flex h-full flex-col bg-ground">
       <div className="flex items-center gap-1 border-b border-line bg-surface px-2 py-1.5">
         <button
           onClick={onBack}
-          aria-label="返回"
+          aria-label={t("profile.backAria")}
           className="flex h-9 w-9 items-center justify-center rounded-lg text-ink transition hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
         >
           <BackIcon />
         </button>
-        <h2 className="text-[15px] font-semibold text-ink">个人中心</h2>
+        <h2 className="text-[15px] font-semibold text-ink">{t("profile.title")}</h2>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3.5">
@@ -194,7 +200,7 @@ export function ProfileView({
                 <p className="truncate text-sm font-semibold text-ink">{userName}</p>
                 {userEmail && <p className="mt-0.5 break-all text-xs text-muted">{userEmail}</p>}
                 <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent-ink">
-                  <CheckIcon /> 已同步
+                  <CheckIcon /> {t("profile.synced")}
                 </span>
               </div>
             </div>
@@ -203,7 +209,7 @@ export function ProfileView({
               onClick={onSignOut}
               className="mt-3 w-full border border-line py-2.5"
             >
-              退出登录
+              {t("profile.signOut")}
             </Button>
           </>
         ) : (
@@ -216,21 +222,37 @@ export function ProfileView({
                 </svg>
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-ink">本地模式</p>
-                <p className="mt-0.5 text-xs text-muted">未登录</p>
+                <p className="text-sm font-semibold text-ink">{t("profile.localMode")}</p>
+                <p className="mt-0.5 text-xs text-muted">{t("profile.notSignedIn")}</p>
                 <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-[11px] font-semibold text-muted">
-                  数据仅存本机
+                  {t("profile.dataLocalOnly")}
                 </span>
               </div>
             </div>
             <Button onClick={onSignIn} className="mt-3 w-full py-2.5">
-              登录以多设备同步
+              {t("profile.signInToSync")}
             </Button>
             <p className="mt-2.5 px-0.5 text-xs leading-relaxed text-muted">
-              登录后可把本地的待办与提醒同步到账号，换设备也能看到。不登录也能正常使用，数据保存在此浏览器。
+              {t("profile.localHint")}
             </p>
           </>
         )}
+
+        {/* 语言选择器 */}
+        <div className="mt-3 flex items-center justify-between rounded-2xl border border-line bg-surface px-4 py-3">
+          <span className="text-sm text-ink">{t("profile.language")}</span>
+          <select
+            value={pref}
+            onChange={(e) => setPref(e.target.value as LocalePref)}
+            className="rounded-lg border border-line bg-ground px-2 py-1 text-sm text-ink focus:border-accent focus:outline-none"
+            aria-label={t("profile.language")}
+          >
+            <option value="system">{t("profile.langSystem")}</option>
+            <option value="zh-Hans">简体中文</option>
+            <option value="zh-Hant">繁體中文</option>
+            <option value="en">English</option>
+          </select>
+        </div>
 
         {/* 分段：已完成待办 / 历史提醒 */}
         <div className="mt-4 flex gap-1 rounded-xl bg-black/[0.04] p-1">
@@ -243,7 +265,7 @@ export function ProfileView({
                 seg === k ? "bg-surface text-accent-ink shadow-sm" : "text-muted hover:text-ink"
               }`}
             >
-              {k === "todos" ? "已完成待办" : "历史提醒"}
+              {k === "todos" ? t("profile.segTodos") : t("profile.segReminders")}
             </button>
           ))}
         </div>
