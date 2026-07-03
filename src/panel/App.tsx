@@ -66,6 +66,7 @@ export default function App() {
           onBack={() => setShowProfile(false)}
           onSignIn={() => setShowLogin(true)}
           onSignOut={handleSignOut}
+          onChanged={bump}
         />
       )}
     </div>

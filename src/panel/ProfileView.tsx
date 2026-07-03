@@ -33,14 +33,57 @@ function BellIcon() {
   );
 }
 
-/** 已完成待办列表（纯查看 + 触底分页）。 */
-function DoneTodoList({ active }: { active: boolean }) {
-  const { items, loading, loadingMore, hasMore, err, sentinelRef } = useInfiniteList<Todo>(
-    (offset, limit) => todoApi.listDone(offset, limit),
-    0,
-    10,
-    active,
+const doneIconBtn =
+  "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-black/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40";
+const doneIconBtnDanger =
+  "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-danger/10 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40";
+
+function RestoreIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 7v6h6" />
+      <path d="M3.51 13a9 9 0 1 0 2.13-9.36L3 7" />
+    </svg>
   );
+}
+
+function TrashIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </svg>
+  );
+}
+
+/** 已完成待办列表（触底分页;可恢复为未完成、可删除）。 */
+function DoneTodoList({ active, onChanged }: { active: boolean; onChanged: () => void }) {
+  const { items, setItems, loading, loadingMore, hasMore, err, setErr, sentinelRef } =
+    useInfiniteList<Todo>((offset, limit) => todoApi.listDone(offset, limit), 0, 10, active);
+
+  // 恢复为未完成:从「已完成」列表移除,并通知外层刷新「待办」列表。
+  async function restore(id: number) {
+    try {
+      await todoApi.update(id, { is_done: false });
+      setItems((xs) => xs.filter((x) => x.id !== id));
+      setErr("");
+      onChanged();
+    } catch {
+      setErr("恢复失败");
+    }
+  }
+
+  async function remove(id: number) {
+    try {
+      await todoApi.remove(id);
+      setItems((xs) => xs.filter((x) => x.id !== id));
+      setErr("");
+    } catch {
+      setErr("删除失败");
+    }
+  }
+
   if (!active) return null;
   if (loading) return <Loading />;
   if (err) return <p className="p-4 text-center text-sm text-danger">{err}</p>;
@@ -48,8 +91,8 @@ function DoneTodoList({ active }: { active: boolean }) {
   return (
     <div className="overflow-hidden rounded-xl border border-line bg-surface">
       {items.map((t) => (
-        <div key={t.id} className="flex items-start gap-3 border-b border-line px-3.5 py-3 last:border-b-0">
-          <span className="mt-0.5 flex h-[17px] w-[17px] shrink-0 items-center justify-center rounded bg-accent text-white">
+        <div key={t.id} className="flex items-center gap-3 border-b border-line px-3.5 py-3 last:border-b-0">
+          <span className="flex h-[17px] w-[17px] shrink-0 items-center justify-center rounded bg-accent text-white">
             <CheckIcon />
           </span>
           <div className="min-w-0 flex-1">
@@ -59,6 +102,14 @@ function DoneTodoList({ active }: { active: boolean }) {
             {t.done_at && (
               <p className="mt-0.5 tabular-nums text-xs text-muted">{formatDateTime(t.done_at)}</p>
             )}
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <button onClick={() => void restore(t.id)} aria-label={`恢复「${t.content}」为未完成`} title="恢复" className={doneIconBtn}>
+              <RestoreIcon />
+            </button>
+            <button onClick={() => void remove(t.id)} aria-label={`删除「${t.content}」`} title="删除" className={doneIconBtnDanger}>
+              <TrashIcon />
+            </button>
           </div>
         </div>
       ))}
@@ -106,6 +157,7 @@ export function ProfileView({
   onBack,
   onSignIn,
   onSignOut,
+  onChanged,
 }: {
   loggedIn: boolean;
   userName: string;
@@ -113,6 +165,7 @@ export function ProfileView({
   onBack: () => void;
   onSignIn: () => void;
   onSignOut: () => void;
+  onChanged: () => void;
 }) {
   const [seg, setSeg] = useState<Seg>("todos");
 
@@ -196,7 +249,7 @@ export function ProfileView({
         </div>
 
         <div className="mt-3">
-          <DoneTodoList active={seg === "todos"} />
+          <DoneTodoList active={seg === "todos"} onChanged={onChanged} />
           <TriggeredReminderList active={seg === "reminders"} />
         </div>
       </div>
