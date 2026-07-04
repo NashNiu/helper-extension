@@ -8,7 +8,9 @@ import {
 } from "./logic";
 import { reminderApi } from "../shared/api/reminder";
 import { getActiveTimer, setActiveTimer } from "../shared/activeTimer";
-import { LOCALE_KEY, detectSystemLocale, resolveLocale, translate, type Locale, type LocalePref } from "../i18n/core";
+import { translate } from "../i18n/core";
+import { currentLocale } from "../shared/locale";
+import { initClipboard } from "./clipboard";
 import { storageGet, storageSet } from "../shared/storage";
 
 const ICON = "icon-128.png";
@@ -17,20 +19,17 @@ const PANEL_WINDOW_KEY = "helper.panelWindowId";
 // 心跳/触发时需拿到全部待触发提醒(而非分页的前 10 条),故取一个较大的上限。
 const SCHEDULE_LIMIT = 500;
 
-async function currentLocale(): Promise<Locale> {
-  const pref = (await storageGet<LocalePref>(LOCALE_KEY)) ?? "system";
-  return resolveLocale(pref, detectSystemLocale());
-}
-
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel
     .setPanelBehavior({ openPanelOnActionClick: true })
     .catch((e) => console.error(e));
   chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 });
+  void initClipboard();
 });
 
 chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 });
+  void initClipboard();
 });
 
 async function notify(id: string, title: string, message: string) {

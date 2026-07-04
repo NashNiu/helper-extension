@@ -23,7 +23,14 @@ export default defineManifest({
   },
   background: { service_worker: "src/background/index.ts", type: "module" },
   side_panel: { default_path: "src/panel/index.html" },
-  permissions: ["sidePanel", "alarms", "notifications", "storage"],
+  content_scripts: [
+    {
+      matches: ["<all_urls>"],
+      js: ["src/content/clipboardCapture.ts"],
+      run_at: "document_idle",
+    },
+  ],
+  permissions: ["sidePanel", "alarms", "notifications", "storage", "unlimitedStorage", "contextMenus", "clipboardWrite", "clipboardRead"],
   host_permissions: [
     "http://localhost:3001/*",
     "https://helper-backend-production-6abe.up.railway.app/*",
