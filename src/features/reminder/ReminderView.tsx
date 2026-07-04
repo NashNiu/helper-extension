@@ -1,16 +1,28 @@
 import { useCallback } from "react";
 import { reminderApi, type Reminder } from "../../shared/api/reminder";
 import { formatDateTime } from "../../shared/datetime";
-import { Button } from "../../components/Button";
 import { Loading } from "../../components/Loading";
 import { useInfiniteList } from "../../shared/useInfiniteList";
 import { useT } from "../../i18n/react";
+
+const iconBtnDanger =
+  "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-danger/10 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40";
 
 function BellIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
       <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
     </svg>
   );
 }
@@ -57,9 +69,14 @@ export function ReminderView({ refreshKey }: { refreshKey: number }) {
                   <p className="break-words text-sm leading-relaxed text-ink">{r.message}</p>
                   <p className="tabular-nums text-xs text-muted">{formatDateTime(r.trigger_at)}</p>
                 </div>
-                <Button variant="danger" onClick={() => remove(r.id)} className="shrink-0">
-                  {t("action.delete")}
-                </Button>
+                <button
+                  onClick={() => remove(r.id)}
+                  aria-label={t("action.delete")}
+                  title={t("action.delete")}
+                  className={`mt-0.5 ${iconBtnDanger}`}
+                >
+                  <TrashIcon />
+                </button>
               </li>
             ))}
           </ul>
