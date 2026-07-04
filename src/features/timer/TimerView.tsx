@@ -44,6 +44,8 @@ function localPresetKey(id: number): MessageKey | null {
 const stepBtn =
   "flex h-9 w-9 items-center justify-center rounded-full bg-black/[0.06] text-xl font-bold text-ink transition hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40";
 const outlineBtn = "border border-line";
+const accentOutlineBtn = "border border-accent/40 text-accent";
+const dangerOutlineBtn = "border border-danger/40";
 
 export function TimerView({ refreshKey }: { refreshKey: number }) {
   const t = useT();
@@ -162,15 +164,18 @@ export function TimerView({ refreshKey }: { refreshKey: number }) {
               </Button>
             </div>
           ) : (
-            <div className="flex gap-3">
+            <div className="flex flex-wrap justify-center gap-2">
               {running && (
-                <Button variant="ghost" className={outlineBtn} onClick={onPause}>
+                <Button variant="ghost" className={`${outlineBtn} text-ink`} onClick={onPause}>
                   {t("timer.pause")}
                 </Button>
               )}
               {paused && <Button onClick={onResume}>{t("timer.resume")}</Button>}
-              <Button variant="ghost" className={outlineBtn} onClick={onRestart}>
+              <Button variant="ghost" className={accentOutlineBtn} onClick={onRestart}>
                 {t("timer.resetPhase")}
+              </Button>
+              <Button variant="danger" className={dangerOutlineBtn} onClick={onCancel}>
+                {t("timer.endPomodoro")}
               </Button>
             </div>
           )}
@@ -195,15 +200,18 @@ export function TimerView({ refreshKey }: { refreshKey: number }) {
           {fmt(remaining)}
         </div>
         {paused && <p className="text-xs text-muted">{t("timer.paused")}</p>}
-        <div className="flex gap-3">
+        <div className="flex flex-wrap justify-center gap-2">
           {running && (
-            <Button variant="ghost" className={outlineBtn} onClick={onPause}>
+            <Button variant="ghost" className={`${outlineBtn} text-ink`} onClick={onPause}>
               {t("timer.pause")}
             </Button>
           )}
           {paused && <Button onClick={onResume}>{t("timer.resume")}</Button>}
-          <Button variant="ghost" className={outlineBtn} onClick={onRestart}>
+          <Button variant="ghost" className={accentOutlineBtn} onClick={onRestart}>
             {t("timer.reset")}
+          </Button>
+          <Button variant="danger" className={dangerOutlineBtn} onClick={onCancel}>
+            {t("action.cancel")}
           </Button>
         </div>
         <p className="text-xs text-muted">{t("timer.hintOneShot")}</p>
