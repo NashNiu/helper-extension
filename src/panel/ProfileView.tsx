@@ -123,15 +123,22 @@ function DoneTodoList({ active, onChanged }: { active: boolean; onChanged: () =>
   );
 }
 
-/** 已触发（历史）提醒列表（纯查看 + 触底分页）。 */
+/** 已触发（历史）提醒列表（可删除 + 触底分页）。 */
 function TriggeredReminderList({ active }: { active: boolean }) {
   const t = useT();
-  const { items, loading, loadingMore, hasMore, err, sentinelRef } = useInfiniteList<Reminder>(
-    (offset, limit) => reminderApi.listTriggered(offset, limit),
-    0,
-    10,
-    active,
-  );
+  const { items, setItems, loading, loadingMore, hasMore, err, setErr, sentinelRef } =
+    useInfiniteList<Reminder>((offset, limit) => reminderApi.listTriggered(offset, limit), 0, 10, active);
+
+  async function remove(id: number) {
+    try {
+      await reminderApi.remove(id);
+      setItems((xs) => xs.filter((x) => x.id !== id));
+      setErr("");
+    } catch {
+      setErr(t("err.deleteFailed"));
+    }
+  }
+
   if (!active) return null;
   if (loading) return <Loading />;
   if (err) return <p className="p-4 text-center text-sm text-danger">{err}</p>;
@@ -140,13 +147,21 @@ function TriggeredReminderList({ active }: { active: boolean }) {
     <div className="overflow-hidden rounded-xl border border-line bg-surface">
       {items.map((r) => (
         <div key={r.id} className="flex items-start gap-3 border-b border-line px-3.5 py-3 last:border-b-0">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-black/[0.05] text-muted">
+          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-black/[0.05] text-muted">
             <BellIcon />
           </span>
           <div className="min-w-0 flex-1">
             <p className="break-words text-sm leading-snug text-ink/80">{r.message}</p>
             <p className="mt-0.5 tabular-nums text-xs text-muted">{formatDateTime(r.trigger_at)}</p>
           </div>
+          <button
+            onClick={() => void remove(r.id)}
+            aria-label={t("profile.deleteAria", { content: r.message })}
+            title={t("action.delete")}
+            className={`mt-0.5 ${doneIconBtnDanger}`}
+          >
+            <TrashIcon />
+          </button>
         </div>
       ))}
       {hasMore && <div ref={sentinelRef} aria-hidden="true" className="h-px" />}
