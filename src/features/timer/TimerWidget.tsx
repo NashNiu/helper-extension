@@ -4,6 +4,7 @@ import {
   resumeTimer,
   restartPhase,
   advancePhase,
+  cancelTimer,
 } from "../../shared/timerControl";
 import { useCountdown } from "./useCountdown";
 import { Button } from "../../components/Button";
@@ -109,6 +110,11 @@ export function TimerWidget({ onOpen }: { onOpen: () => void }) {
         {(running || paused) && (
           <Button variant="ghost" className={smOutline} onClick={act(restartPhase)}>
             {t("timer.reset")}
+          </Button>
+        )}
+        {(running || paused) && (
+          <Button variant="ghost" className={`${smOutline} text-danger`} onClick={act(cancelTimer)}>
+            {session ? t("timer.endPomodoro") : t("action.cancel")}
           </Button>
         )}
         {awaiting && (
