@@ -155,4 +155,13 @@ describe("async wrappers", () => {
     expect(items.map((i) => i.id)).toEqual(["b"]);
     expect((await getItems()).map((i) => i.id)).toEqual(["b"]);
   });
+  it("serializes concurrent addItem calls without dropping", async () => {
+    await Promise.all([
+      addItem(txt("a", "one", 100)),
+      addItem(txt("b", "two", 200)),
+      addItem(txt("c", "three", 300)),
+    ]);
+    const ids = (await getItems()).map((i) => i.id).sort();
+    expect(ids).toEqual(["a", "b", "c"]);
+  });
 });

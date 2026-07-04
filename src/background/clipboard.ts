@@ -1,6 +1,6 @@
 import { translate } from "../i18n/core";
 import { currentLocale } from "../shared/locale";
-import { addItem } from "../shared/clipboardStore";
+import { addItem, MAX_IMAGE_BYTES } from "../shared/clipboardStore";
 import {
   CAPTURE_TEXT,
   hostnameOf,
@@ -29,6 +29,16 @@ async function saveImage(srcUrl: string, source: string): Promise<void> {
     const res = await fetch(srcUrl);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const blob = await res.blob();
+    if (blob.size > MAX_IMAGE_BYTES) {
+      await chrome.notifications.create(`clip-err:${Date.now()}`, {
+        type: "basic",
+        iconUrl: chrome.runtime.getURL(ICON),
+        title: translate(loc, "clip.imageTooLarge"),
+        message: translate(loc, "clip.imageTooLarge"),
+        priority: 1,
+      });
+      return;
+    }
     const bmp = await createImageBitmap(blob);
     const w = bmp.width;
     const h = bmp.height;

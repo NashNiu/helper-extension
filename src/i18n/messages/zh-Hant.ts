@@ -139,4 +139,6 @@ export const zhHant: Record<keyof typeof en, string> = {
   "clip.readFailed": "讀取剪貼簿失敗",
   "clip.saveImageFailed": "圖片儲存失敗",
   "clip.menuSaveImage": "複製圖片到 Helper 剪貼簿",
+  "clip.actionFailed": "操作失敗",
+  "clip.imageTooLarge": "圖片過大，無法儲存",
 };

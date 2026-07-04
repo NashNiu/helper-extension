@@ -139,4 +139,6 @@ export const zhHans: Record<keyof typeof en, string> = {
   "clip.readFailed": "读取剪贴板失败",
   "clip.saveImageFailed": "图片保存失败",
   "clip.menuSaveImage": "复制图片到 Helper 剪贴板",
+  "clip.actionFailed": "操作失败",
+  "clip.imageTooLarge": "图片过大，无法保存",
 };

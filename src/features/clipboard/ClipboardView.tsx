@@ -10,6 +10,7 @@ import {
   setLimit,
   CLIP_ITEMS_KEY,
   DEFAULT_LIMIT,
+  MAX_IMAGE_BYTES,
   type ClipItem,
 } from "../../shared/clipboardStore";
 import { makeImageItem, makeTextItem } from "../../shared/clipboardMessage";
@@ -223,7 +224,7 @@ export function ClipboardView({ refreshKey }: { refreshKey: number }) {
     try {
       setItems(it.pinned ? await unpinItem(it.id) : await pinItem(it.id));
     } catch {
-      flash(t("clip.copyFailed"));
+      flash(t("clip.actionFailed"));
     }
   }, [flash, t]);
 
@@ -231,7 +232,7 @@ export function ClipboardView({ refreshKey }: { refreshKey: number }) {
     try {
       setItems(await removeItem(it.id));
     } catch {
-      flash(t("clip.copyFailed"));
+      flash(t("clip.actionFailed"));
     }
   }, [flash, t]);
 
@@ -244,6 +245,10 @@ export function ClipboardView({ refreshKey }: { refreshKey: number }) {
         const imgType = ci.types.find((ty) => ty.startsWith("image/"));
         if (imgType) {
           const blob = await ci.getType(imgType);
+          if (blob.size > MAX_IMAGE_BYTES) {
+            flash(t("clip.imageTooLarge"));
+            return;
+          }
           const dataUrl = await new Promise<string>((res, rej) => {
             const fr = new FileReader();
             fr.onload = () => res(fr.result as string);

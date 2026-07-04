@@ -1,8 +1,14 @@
 import { buildTextCapture } from "../shared/clipboardMessage";
 
-// 页面上 Ctrl+C 会触发 copy 事件;取选中文字发给后台入库。图片走右键菜单(见 background/clipboard.ts)。
+function send(msg: object): void {
+  chrome.runtime.sendMessage(msg).catch(() => {
+    // SW 可能正在冷启动;短暂延迟后重试一次,仍失败才放弃。
+    setTimeout(() => { void chrome.runtime.sendMessage(msg).catch(() => {}); }, 150);
+  });
+}
+
 document.addEventListener("copy", () => {
   const raw = window.getSelection?.()?.toString() ?? "";
   const msg = buildTextCapture(raw, location.hostname);
-  if (msg) chrome.runtime.sendMessage(msg).catch(() => {});
+  if (msg) send(msg);
 });

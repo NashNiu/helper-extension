@@ -137,6 +137,8 @@ export const en = {
   "clip.readFailed": "Couldn't read clipboard",
   "clip.saveImageFailed": "Couldn't save image",
   "clip.menuSaveImage": "Copy image to Helper clipboard",
+  "clip.actionFailed": "Action failed",
+  "clip.imageTooLarge": "Image too large to save",
 } as const;
 
 export type MessageKey = keyof typeof en;

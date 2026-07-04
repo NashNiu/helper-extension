@@ -1,5 +1,15 @@
 import { storageGet, storageSet } from "./storage";
 
+// 串行化所有写操作:三条捕获通道可能并发写,不排队会互相覆盖丢数据。
+let writeTail: Promise<unknown> = Promise.resolve();
+function enqueue<T>(op: () => Promise<T>): Promise<T> {
+  const run = writeTail.then(op, op);
+  writeTail = run.catch(() => {});
+  return run;
+}
+
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 单张图片上限,超出拒绝入库,避免本地存储被撑爆
+
 export const CLIP_ITEMS_KEY = "helper.clipboard.items";
 export const CLIP_SETTINGS_KEY = "helper.clipboard.settings";
 export const DEFAULT_LIMIT = 100;
@@ -91,34 +101,44 @@ export async function getSettings(): Promise<ClipSettings> {
   return s && typeof s.limit === "number" ? s : { limit: DEFAULT_LIMIT };
 }
 
-export async function addItem(item: ClipItem): Promise<ClipItem[]> {
-  const [items, settings] = await Promise.all([getItems(), getSettings()]);
-  const next = cull(dedupe(items, item), settings.limit);
-  await setItems(next);
-  return next;
+export function addItem(item: ClipItem): Promise<ClipItem[]> {
+  return enqueue(async () => {
+    const [items, settings] = await Promise.all([getItems(), getSettings()]);
+    const next = cull(dedupe(items, item), settings.limit);
+    await setItems(next);
+    return next;
+  });
 }
 
-export async function setLimit(limit: number): Promise<ClipItem[]> {
-  await storageSet(CLIP_SETTINGS_KEY, { limit });
-  const next = cull(await getItems(), limit);
-  await setItems(next);
-  return next;
+export function setLimit(limit: number): Promise<ClipItem[]> {
+  return enqueue(async () => {
+    await storageSet(CLIP_SETTINGS_KEY, { limit });
+    const next = cull(await getItems(), limit);
+    await setItems(next);
+    return next;
+  });
 }
 
-export async function pinItem(id: string): Promise<ClipItem[]> {
-  const next = applyPin(await getItems(), id, Date.now());
-  await setItems(next);
-  return next;
+export function pinItem(id: string): Promise<ClipItem[]> {
+  return enqueue(async () => {
+    const next = applyPin(await getItems(), id, Date.now());
+    await setItems(next);
+    return next;
+  });
 }
 
-export async function unpinItem(id: string): Promise<ClipItem[]> {
-  const next = applyUnpin(await getItems(), id);
-  await setItems(next);
-  return next;
+export function unpinItem(id: string): Promise<ClipItem[]> {
+  return enqueue(async () => {
+    const next = applyUnpin(await getItems(), id);
+    await setItems(next);
+    return next;
+  });
 }
 
-export async function removeItem(id: string): Promise<ClipItem[]> {
-  const next = applyRemove(await getItems(), id);
-  await setItems(next);
-  return next;
+export function removeItem(id: string): Promise<ClipItem[]> {
+  return enqueue(async () => {
+    const next = applyRemove(await getItems(), id);
+    await setItems(next);
+    return next;
+  });
 }
