@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getItems,
   sortForDisplay,
@@ -156,7 +156,7 @@ export function ClipboardView({ refreshKey }: { refreshKey: number }) {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
-  const [limit, setLimitState] = useState(DEFAULT_LIMIT);
+  const [limitDraft, setLimitDraft] = useState(String(DEFAULT_LIMIT));
   const [toast, setToast] = useState("");
 
   const reload = useCallback(async () => {
@@ -169,7 +169,7 @@ export function ClipboardView({ refreshKey }: { refreshKey: number }) {
   }, [reload, refreshKey]);
 
   useEffect(() => {
-    void getSettings().then((s) => setLimitState(s.limit));
+    void getSettings().then((s) => setLimitDraft(String(s.limit)));
   }, [refreshKey]);
 
   // Live refresh when background captures write to storage
@@ -193,10 +193,13 @@ export function ClipboardView({ refreshKey }: { refreshKey: number }) {
 
   const total = groups.pinned.length + groups.today.length + groups.earlier.length;
 
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flash = useCallback((msg: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast(msg);
-    window.setTimeout(() => setToast(""), 1400);
+    toastTimer.current = setTimeout(() => setToast(""), 1400);
   }, []);
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
   const onCopy = useCallback(
     async (it: ClipItem) => {
@@ -217,17 +220,26 @@ export function ClipboardView({ refreshKey }: { refreshKey: number }) {
   );
 
   const onPin = useCallback(async (it: ClipItem) => {
-    setItems(it.pinned ? await unpinItem(it.id) : await pinItem(it.id));
-  }, []);
+    try {
+      setItems(it.pinned ? await unpinItem(it.id) : await pinItem(it.id));
+    } catch {
+      flash(t("clip.copyFailed"));
+    }
+  }, [flash, t]);
 
   const onDelete = useCallback(async (it: ClipItem) => {
-    setItems(await removeItem(it.id));
-  }, []);
+    try {
+      setItems(await removeItem(it.id));
+    } catch {
+      flash(t("clip.copyFailed"));
+    }
+  }, [flash, t]);
 
   // Paste zone: prefer navigator.clipboard.read (needs clipboardRead perm + focus); fallback to error toast.
   const onPasteZone = useCallback(async () => {
     try {
       const clipItems = await navigator.clipboard.read();
+      let saved = false;
       for (const ci of clipItems) {
         const imgType = ci.types.find((ty) => ty.startsWith("image/"));
         if (imgType) {
@@ -246,7 +258,8 @@ export function ClipboardView({ refreshKey }: { refreshKey: number }) {
           });
           setItems(await addItem(makeImageItem({ dataUrl, bytes: blob.size, w: dims.w, h: dims.h, source: "manual", id: crypto.randomUUID(), createdAt: Date.now() })));
           flash(t("clip.saved"));
-          return;
+          saved = true;
+          break;
         }
         if (ci.types.includes("text/plain")) {
           const blob = await ci.getType("text/plain");
@@ -254,20 +267,22 @@ export function ClipboardView({ refreshKey }: { refreshKey: number }) {
           if (text) {
             setItems(await addItem(makeTextItem({ text, source: "manual", id: crypto.randomUUID(), createdAt: Date.now() })));
             flash(t("clip.saved"));
+            saved = true;
           }
-          return;
+          break;
         }
       }
+      if (!saved) flash(t("clip.readFailed"));
     } catch {
       flash(t("clip.readFailed"));
     }
   }, [flash, t]);
 
-  const onChangeLimit = useCallback(async (n: number) => {
-    const v = Math.max(1, Math.min(1000, Math.round(n) || DEFAULT_LIMIT));
-    setLimitState(v);
-    setItems(await setLimit(v));
-  }, []);
+  const commitLimit = useCallback(async () => {
+    const n = Math.max(1, Math.min(1000, Math.round(Number(limitDraft)) || DEFAULT_LIMIT));
+    setLimitDraft(String(n));
+    setItems(await setLimit(n));
+  }, [limitDraft]);
 
   return (
     <div className="relative flex h-full flex-col">
@@ -320,8 +335,10 @@ export function ClipboardView({ refreshKey }: { refreshKey: number }) {
             type="number"
             min={1}
             max={1000}
-            value={limit}
-            onChange={(e) => void onChangeLimit(Number(e.target.value))}
+            value={limitDraft}
+            onChange={(e) => setLimitDraft(e.target.value)}
+            onBlur={() => void commitLimit()}
+            onKeyDown={(e) => { if (e.key === "Enter") void commitLimit(); }}
             className="w-14 rounded-md border border-line bg-ground px-1.5 py-1 text-center text-xs text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           />
           {t("clip.limitUnit")}
