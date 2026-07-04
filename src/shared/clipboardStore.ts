@@ -53,10 +53,8 @@ export function sortForDisplay(items: ClipItem[], now: number): ClipGroups {
   const d = new Date(now);
   d.setHours(0, 0, 0, 0);
   const startOfToday = d.getTime();
-  const pinned = items
-    .filter((i) => i.pinned)
-    .sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0));
-  const nonPinned = items.filter((i) => !i.pinned).sort((a, b) => b.createdAt - a.createdAt);
+  const pinned = [...items.filter((i) => i.pinned)].sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0));
+  const nonPinned = [...items.filter((i) => !i.pinned)].sort((a, b) => b.createdAt - a.createdAt);
   return {
     pinned,
     today: nonPinned.filter((i) => i.createdAt >= startOfToday),
@@ -69,7 +67,11 @@ export function applyPin(items: ClipItem[], id: string, now: number): ClipItem[]
 }
 
 export function applyUnpin(items: ClipItem[], id: string): ClipItem[] {
-  return items.map((i) => (i.id === id ? { ...i, pinned: false, pinnedAt: undefined } : i));
+  return items.map((i) => {
+    if (i.id !== id) return i;
+    const { pinnedAt: _drop, ...rest } = i;
+    return { ...rest, pinned: false };
+  });
 }
 
 export function applyRemove(items: ClipItem[], id: string): ClipItem[] {

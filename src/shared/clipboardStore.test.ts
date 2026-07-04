@@ -10,6 +10,9 @@ import {
   getSettings,
   setLimit,
   getItems,
+  pinItem,
+  unpinItem,
+  removeItem,
   DEFAULT_LIMIT,
   type ClipItem,
 } from "./clipboardStore";
@@ -52,6 +55,11 @@ describe("dedupe", () => {
     const out = dedupe(items, img("c", 300));
     expect(out.map((i) => i.id)).toEqual(["c", "a"]);
   });
+  it("does not dedupe when incoming matches a non-newest text item", () => {
+    const items = [txt("a", "hi", 300), txt("b", "hello", 200)];
+    const out = dedupe(items, txt("c", "hello", 400));
+    expect(out.map((i) => i.id)).toEqual(["c", "a", "b"]);
+  });
 });
 
 describe("cull", () => {
@@ -80,6 +88,17 @@ describe("sortForDisplay", () => {
     expect(g.pinned.map((i) => i.id)).toEqual(["p2", "p1"]);
     expect(g.today.map((i) => i.id)).toEqual(["t1"]);
     expect(g.earlier.map((i) => i.id)).toEqual(["e1"]);
+  });
+  it("orders items within today and earlier groups by createdAt desc", () => {
+    const items = [
+      txt("t1", "a", startOfToday + 1000),
+      txt("t2", "b", startOfToday + 3000),
+      txt("e1", "c", startOfToday - 1000),
+      txt("e2", "d", startOfToday - 3000),
+    ];
+    const g = sortForDisplay(items, now);
+    expect(g.today.map((i) => i.id)).toEqual(["t2", "t1"]);
+    expect(g.earlier.map((i) => i.id)).toEqual(["e1", "e2"]);
   });
 });
 
@@ -118,5 +137,22 @@ describe("async wrappers", () => {
     await addItem(txt("c", "3", 300));
     await setLimit(1);
     expect((await getItems()).map((i) => i.id)).toEqual(["c"]);
+  });
+  it("pinItem/unpinItem persist pinned state", async () => {
+    await addItem(txt("a", "x", 100));
+    let items = await pinItem("a");
+    expect(items[0].pinned).toBe(true);
+    expect(typeof items[0].pinnedAt).toBe("number");
+    items = await unpinItem("a");
+    expect(items[0].pinned).toBe(false);
+    expect(items[0].pinnedAt).toBeUndefined();
+    expect(await getItems()).toEqual(items); // persisted
+  });
+  it("removeItem persists deletion", async () => {
+    await addItem(txt("a", "x", 100));
+    await addItem(txt("b", "y", 200));
+    const items = await removeItem("a");
+    expect(items.map((i) => i.id)).toEqual(["b"]);
+    expect((await getItems()).map((i) => i.id)).toEqual(["b"]);
   });
 });
