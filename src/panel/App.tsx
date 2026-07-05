@@ -51,8 +51,9 @@ export default function App() {
         userInitial={user?.username?.slice(0, 1) ?? ""}
         onOpenProfile={() => setShowProfile(true)}
       />
-      {/* “一句话智能添加”对登录/未登录都可用：登录走后端 AI，未登录走公开 AI 接口 + 写本地。 */}
-      <QuickAddBar onAdded={bump} loggedIn={loggedIn} />
+      {/* “一句话智能添加”对登录/未登录都可用：登录走后端 AI，未登录走公开 AI 接口 + 写本地。
+          剪贴板 tab 不涉及 AI 添加，故隐藏。 */}
+      {tab !== "clipboard" && <QuickAddBar onAdded={bump} loggedIn={loggedIn} />}
       <main className="min-h-0 flex-1 overflow-y-auto">
         {tab === "reminder" && <ReminderView refreshKey={refreshKey} />}
         {tab === "timer" && <TimerView refreshKey={refreshKey} />}
