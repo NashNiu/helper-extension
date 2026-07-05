@@ -2,7 +2,7 @@ import type { ReactElement } from "react";
 import { useT } from "../i18n/react";
 import type { MessageKey } from "../i18n/messages/en";
 
-export type TabKey = "reminder" | "timer" | "todo";
+export type TabKey = "reminder" | "timer" | "todo" | "clipboard";
 
 function BellIcon() {
   return (
@@ -40,16 +40,27 @@ function PersonIcon() {
   );
 }
 
+function ClipboardIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="8" y="2" width="8" height="4" rx="1" />
+      <path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2" />
+    </svg>
+  );
+}
+
 const tabs: { key: TabKey; Icon: () => ReactElement }[] = [
   { key: "todo", Icon: CheckSquareIcon },
   { key: "reminder", Icon: BellIcon },
   { key: "timer", Icon: ClockIcon },
+  { key: "clipboard", Icon: ClipboardIcon },
 ];
 
 const TAB_LABEL: Record<TabKey, MessageKey> = {
   todo: "tab.todo",
   reminder: "tab.reminder",
   timer: "tab.timer",
+  clipboard: "tab.clipboard",
 };
 
 export function TabBar({

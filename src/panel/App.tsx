@@ -9,6 +9,7 @@ import { ReminderView } from "../features/reminder/ReminderView";
 import { TimerView } from "../features/timer/TimerView";
 import { TimerWidget } from "../features/timer/TimerWidget";
 import { TodoView } from "../features/todo/TodoView";
+import { ClipboardView } from "../features/clipboard/ClipboardView";
 
 export default function App() {
   const t = useT();
@@ -56,6 +57,7 @@ export default function App() {
         {tab === "reminder" && <ReminderView refreshKey={refreshKey} />}
         {tab === "timer" && <TimerView refreshKey={refreshKey} />}
         {tab === "todo" && <TodoView refreshKey={refreshKey} />}
+        {tab === "clipboard" && <ClipboardView refreshKey={refreshKey} />}
       </main>
 
       {tab !== "timer" && !showProfile && <TimerWidget onOpen={() => setTab("timer")} />}
