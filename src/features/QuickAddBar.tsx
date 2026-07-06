@@ -4,12 +4,11 @@ import { Input } from "../components/Input";
 import { useT } from "../i18n/react";
 import type { MessageKey } from "../i18n/messages/en";
 import { classifyApi } from "../shared/api/classify";
-import { publicAiApi } from "../shared/api/publicAi";
 import { reminderApi } from "../shared/api/reminder";
 import { timerApi } from "../shared/api/timer";
 import { todoApi } from "../shared/api/todo";
-import { startTimer } from "../shared/timerControl";
 import { ApiError } from "../shared/http";
+import { makeLocalQuickAddDeps } from "../shared/local/localQuickAdd";
 import { routeQuickAdd, type QuickAddDeps } from "./quickAdd";
 
 type HintKind = "ok" | "warn" | "error";
@@ -60,7 +59,7 @@ export function QuickAddBar({
   const inputRef = useRef<HTMLInputElement>(null);
   const submittedRef = useRef(false);
 
-  // 登录:后端 AI 解析并落库。未登录:公开 AI 接口只解析,结果写本地。
+  // 登录:后端 AI 解析并落库。未登录:本地规则解析,零后端 AI 调用。
   const deps = useMemo<QuickAddDeps>(
     () =>
       loggedIn
@@ -70,18 +69,7 @@ export function QuickAddBar({
             createTimer: timerApi.createFromText,
             createTodo: todoApi.create,
           }
-        : {
-            classify: publicAiApi.classify,
-            createReminder: async (input) => {
-              const p = await publicAiApi.parseReminder(input);
-              await reminderApi.createManual(p);
-            },
-            createTimer: async (input) => {
-              const p = await publicAiApi.parseTimer(input);
-              await startTimer(0, p.name, p.duration_seconds);
-            },
-            createTodo: todoApi.create,
-          },
+        : makeLocalQuickAddDeps(),
     [loggedIn],
   );
 
