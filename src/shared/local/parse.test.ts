@@ -132,10 +132,26 @@ describe("parseReminderTime - weekday & absolute", () => {
     const at = parseReminderTime("3月5日上午十点体检", NOW)!;
     expect([at.getMonth(), at.getDate(), at.getHours()]).toEqual([2, 5, 10]);
   });
-  it("rolls day-only past date to next month", () => {
+  it("keeps a still-future day-of-month this month", () => {
     // NOW=1/1;"1号" 已过(1/1 09:00 > 08:00 之前?)这里用明确过去日:测 1 号 08:00 之前
     const at = parseReminderTime("每月1号9点还款", NOW)!;
     // 1/1 09:00 晚于 NOW(08:00),仍是本月 1 号
     expect([at.getMonth(), at.getDate(), at.getHours()]).toEqual([0, 1, 9]);
+  });
+  it("parses 下周四 as next calendar week (monday-start)", () => {
+    const at = parseReminderTime("下周四理发", NOW)!;
+    expect([at.getMonth(), at.getDate(), at.getHours()]).toEqual([0, 8, 9]);
+  });
+  it("parses 下周五 into next week, not this Friday", () => {
+    const at = parseReminderTime("下周五10点", NOW)!;
+    expect([at.getMonth(), at.getDate(), at.getHours()]).toEqual([0, 9, 10]);
+  });
+  it("rolls a day-only past time to next month", () => {
+    // NOW = 1/1 08:00;"1号7点" 已过 → 滚到 2/1 07:00
+    const at = parseReminderTime("1号7点还款", NOW)!;
+    expect([at.getMonth(), at.getDate(), at.getHours()]).toEqual([1, 1, 7]);
+  });
+  it("rejects an invalid calendar date", () => {
+    expect(parseReminderTime("2月30日9点", NOW)).toBeNull();
   });
 });

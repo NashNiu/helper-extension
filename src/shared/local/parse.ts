@@ -161,18 +161,26 @@ function tryNamedDay(input: string, now: Date): Date | null {
 }
 
 function tryWeekday(input: string, now: Date): Date | null {
-  const m = input.match(
-    /(下(?:个|個)?(?:周|週|星期|礼拜|禮拜)|下(?:周|週)|这(?:周|週|星期)|本(?:周|週))?\s*(?:周|週|星期|礼拜|禮拜)([一二三四五六日天末])/,
-  );
+  const m = input.match(/(?:周|週|星期|礼拜|禮拜)([一二三四五六日天末])/);
   if (!m) return null;
   const map: Record<string, number> = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 日: 0, 天: 0, 末: 6 };
-  const target = map[m[2]];
+  const target = map[m[1]];
   if (target == null) return null;
+
   const base = new Date(now);
-  let diff = (target - base.getDay() + 7) % 7;
-  if (diff === 0) diff = 7; // 取下一次,不含今天
-  if (m[1] && /下/.test(m[1])) diff += 7;
-  base.setDate(base.getDate() + diff);
+  const nextWeek = /下(?:个|個)?(?:周|週|星期|礼拜|禮拜)/.test(input);
+  if (nextWeek) {
+    // 下周X:下一个自然周(周一为起点)的星期 X
+    const mondayOffset = (base.getDay() + 6) % 7; // 今天距本周一的天数
+    base.setDate(base.getDate() - mondayOffset + 7); // 下周一
+    base.setDate(base.getDate() + ((target + 6) % 7)); // 周一=0 … 周日=6
+  } else {
+    // 周X:下一次到来的星期 X(不含今天)
+    let diff = (target - base.getDay() + 7) % 7;
+    if (diff === 0) diff = 7;
+    base.setDate(base.getDate() + diff);
+  }
+
   const clock = parseClock(input);
   base.setHours(clock ? clock.hour : 9, clock ? clock.minute : 0, 0, 0);
   return base;
@@ -190,6 +198,7 @@ function tryAbsolute(input: string, now: Date): Date | null {
   base.setDate(1);
   base.setMonth(month);
   base.setDate(day);
+  if (base.getDate() !== day) return null; // 非法日期(如 2月30日)溢出 → 视为无法解析
   const clock = parseClock(input);
   base.setHours(clock ? clock.hour : 9, clock ? clock.minute : 0, 0, 0);
   if (base.getTime() < now.getTime()) {
