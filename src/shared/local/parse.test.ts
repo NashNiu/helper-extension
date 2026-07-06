@@ -100,3 +100,19 @@ describe("parseReminderTime - relative", () => {
     expect(parseReminderTime("买牛奶", NOW)).toBeNull();
   });
 });
+
+describe("parseReminderTime - named day", () => {
+  it("parses 明天 + clock", () => {
+    const at = parseReminderTime("明天九点开会", NOW)!;
+    expect([at.getFullYear(), at.getMonth(), at.getDate(), at.getHours(), at.getMinutes()])
+      .toEqual([2026, 0, 2, 9, 0]);
+  });
+  it("parses 后天 with afternoon", () => {
+    const at = parseReminderTime("后天下午三点半交报告", NOW)!;
+    expect([at.getMonth(), at.getDate(), at.getHours(), at.getMinutes()]).toEqual([0, 3, 15, 30]);
+  });
+  it("defaults to 09:00 when no clock given", () => {
+    const at = parseReminderTime("明天记得体检", NOW)!;
+    expect([at.getDate(), at.getHours(), at.getMinutes()]).toEqual([2, 9, 0]);
+  });
+});

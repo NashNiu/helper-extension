@@ -142,7 +142,25 @@ function tryRelative(input: string, now: Date): Date | null {
   return new Date(now.getTime() + n * mult * 1000);
 }
 
+function tryNamedDay(input: string, now: Date): Date | null {
+  const days: Array<[RegExp, number]> = [
+    [/大后天|大後天/, 3],
+    [/后天|後天/, 2],
+    [/明天|明日|明儿/, 1],
+    [/今天|今日|今晚|今早|今晨/, 0],
+  ];
+  for (const [pat, offset] of days) {
+    if (!pat.test(input)) continue;
+    const base = new Date(now);
+    base.setDate(base.getDate() + offset);
+    const clock = parseClock(input);
+    base.setHours(clock ? clock.hour : 9, clock ? clock.minute : 0, 0, 0);
+    return base;
+  }
+  return null;
+}
+
 /** 自然语言 → 触发时间。识别不到时间返回 null。 */
 export function parseReminderTime(input: string, now: Date): Date | null {
-  return tryRelative(input, now);
+  return tryRelative(input, now) ?? tryNamedDay(input, now);
 }
