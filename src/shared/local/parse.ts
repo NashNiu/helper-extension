@@ -117,3 +117,32 @@ export function parseClock(input: string): { hour: number; minute: number } | nu
   }
   return { hour, minute };
 }
+
+function tryRelative(input: string, now: Date): Date | null {
+  if (/半\s*(?:个|個)?\s*(?:小时|小時|钟头|鐘頭)(?:后|後|之后|之後|以后|以後)/.test(input)) {
+    return new Date(now.getTime() + 1800 * 1000);
+  }
+  const re = new RegExp(
+    `(${NUM})\\s*(?:个|個)?\\s*(分钟|分鐘|分|小时|小時|钟头|鐘頭|天|日|周|週|星期|礼拜|禮拜|秒)(?:钟|鐘)?\\s*(?:后|後|之后|之後|以后|以後)`,
+  );
+  const m = input.match(re);
+  if (!m) return null;
+  const n = zhToNum(m[1]);
+  if (n == null) return null;
+  const unit = m[2];
+  const mult = /分/.test(unit)
+    ? 60
+    : /小时|小時|钟头|鐘頭/.test(unit)
+      ? 3600
+      : /天|日/.test(unit)
+        ? 86400
+        : /周|週|星期|礼拜|禮拜/.test(unit)
+          ? 604800
+          : 1;
+  return new Date(now.getTime() + n * mult * 1000);
+}
+
+/** 自然语言 → 触发时间。识别不到时间返回 null。 */
+export function parseReminderTime(input: string, now: Date): Date | null {
+  return tryRelative(input, now);
+}

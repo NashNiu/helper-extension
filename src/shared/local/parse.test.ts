@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { zhToNum, parseDuration, parseTimer, parseClock } from "./parse";
+import { zhToNum, parseDuration, parseTimer, parseClock, parseReminderTime } from "./parse";
 
 describe("zhToNum", () => {
   it("parses arabic digits", () => {
@@ -78,5 +78,25 @@ describe("parseClock", () => {
   });
   it("rejects an out-of-range hour", () => {
     expect(parseClock("25点")).toBeNull();
+  });
+});
+
+const NOW = new Date(2026, 0, 1, 8, 0, 0); // 2026-01-01(周四)08:00 本地时间
+
+describe("parseReminderTime - relative", () => {
+  it("parses N分钟后", () => {
+    const at = parseReminderTime("30分钟后提醒我喝水", NOW)!;
+    expect(at.getTime()).toBe(NOW.getTime() + 30 * 60 * 1000);
+  });
+  it("parses N小时后 with chinese numeral", () => {
+    const at = parseReminderTime("两小时后开会", NOW)!;
+    expect(at.getTime()).toBe(NOW.getTime() + 2 * 3600 * 1000);
+  });
+  it("parses 半小时后", () => {
+    const at = parseReminderTime("半小时后", NOW)!;
+    expect(at.getTime()).toBe(NOW.getTime() + 30 * 60 * 1000);
+  });
+  it("returns null with no time", () => {
+    expect(parseReminderTime("买牛奶", NOW)).toBeNull();
   });
 });
