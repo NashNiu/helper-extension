@@ -1,3 +1,15 @@
+import {
+  parseClockEn,
+  parseTimerEn,
+  tryRelativeEn,
+  tryNamedDayEn,
+  tryWeekdayEn,
+  tryAbsoluteEn,
+  cleanReminderMessageEn,
+  hasEnDateAnchorEn,
+  EN_TIMER_CUE,
+} from "./parseEn";
+
 export type AssistantType = "reminder" | "timer" | "todo";
 
 export interface ParsedReminder {
@@ -70,7 +82,7 @@ export function parseTimer(input: string): ParsedTimer | null {
   let seconds = parseDuration(input);
   const isPomodoro = /番茄|蕃茄/.test(input);
   if (seconds == null && isPomodoro) seconds = 25 * 60;
-  if (seconds == null || seconds <= 0) return null;
+  if (seconds == null || seconds <= 0) return parseTimerEn(input);
 
   const name = input
     .replace(/(计时|計時|倒计时|倒計時|定时|定時|番茄钟?|蕃茄钟?|专注|專注)/g, "")
@@ -92,7 +104,7 @@ export function parseClock(input: string): { hour: number; minute: number } | nu
     `(上午|早上|早晨|凌晨|中午|下午|傍晚|晚上|夜里|夜晚)?\\s*(${NUM})\\s*[点點:：时時]\\s*(半|一刻|三刻|(?:${NUM}))?\\s*分?`,
   );
   const m = input.match(re);
-  if (!m) return null;
+  if (!m) return parseClockEn(input);
 
   let hour = zhToNum(m[2]);
   if (hour == null || hour > 23) return null;
@@ -215,7 +227,8 @@ function tryClockOnly(input: string, now: Date): Date | null {
   // 用数字前缀避免误伤"每日/生日/日常"等非日期词。
   const hasNumericDateAnchor =
     new RegExp(`(?:${NUM})\\s*月`).test(input) ||
-    new RegExp(`(?:${NUM})\\s*[日号號]`).test(input);
+    new RegExp(`(?:${NUM})\\s*[日号號]`).test(input) ||
+    hasEnDateAnchorEn(input);
   if (hasNumericDateAnchor) return null;
   const clock = parseClock(input);
   if (!clock) return null;
@@ -232,12 +245,17 @@ export function parseReminderTime(input: string, now: Date): Date | null {
     tryNamedDay(input, now) ??
     tryWeekday(input, now) ??
     tryAbsolute(input, now) ??
+    tryRelativeEn(input, now) ??
+    tryNamedDayEn(input, now) ??
+    tryWeekdayEn(input, now) ??
+    tryAbsoluteEn(input, now) ??
     tryClockOnly(input, now)
   );
 }
 
 /** 剔除提醒消息中的时间词和提示词,返回纯消息。 */
 function cleanReminderMessage(input: string): string {
+  if (!/[一-鿿]/.test(input)) return cleanReminderMessageEn(input);
   return input
     .replace(/(大后天|大後天|后天|後天|明天|明日|明儿|今天|今日|今晚|今早|今晨)/g, "")
     .replace(/(下(?:个|個)?)?(?:周|週|星期|礼拜|禮拜)[一二三四五六日天末]/g, "")
@@ -271,7 +289,7 @@ export function parseReminder(input: string, now: Date): ParsedReminder | null {
 
 /** 归类:timer / reminder / todo(只返回单一类型;歧义归 todo)。 */
 export function classify(input: string, now: Date): { types: AssistantType[] } {
-  const timerCue = /计时|計時|倒计时|倒計時|番茄|蕃茄|专注|專注|定时|定時/.test(input);
+  const timerCue = /计时|計時|倒计时|倒計時|番茄|蕃茄|专注|專注|定时|定時/.test(input) || EN_TIMER_CUE.test(input);
   if (timerCue && parseTimer(input)) return { types: ["timer"] };
   if (parseReminderTime(input, now)) return { types: ["reminder"] };
   return { types: ["todo"] };

@@ -117,3 +117,11 @@ describe("hasEnDateAnchorEn", () => {
     expect(hasEnDateAnchorEn("call at 8pm")).toBe(false);
   });
 });
+
+describe("EN_TIMER_CUE", () => {
+  it("matches English timer cue words", () => {
+    expect(EN_TIMER_CUE.test("timer 25 min")).toBe(true);
+    expect(EN_TIMER_CUE.test("pomodoro")).toBe(true);
+    expect(EN_TIMER_CUE.test("buy milk")).toBe(false);
+  });
+});

@@ -207,3 +207,31 @@ describe("parseReminderTime - clock only (no day)", () => {
     expect(parseReminderTime("2月30日9点", NOW)).toBeNull();
   });
 });
+
+describe("English integration via parse.ts entry points", () => {
+  it("classifies and parses an English reminder with clock", () => {
+    expect(classify("remind me at 8pm to take meds", NOW)).toEqual({ types: ["reminder"] });
+    const r = parseReminder("remind me at 8pm to take meds", NOW)!;
+    expect(new Date(r.trigger_at).getHours()).toBe(20);
+    expect(r.message).toBe("to take meds");
+  });
+  it("classifies an English timer", () => {
+    expect(classify("timer 25 min", NOW)).toEqual({ types: ["timer"] });
+    expect(parseTimer("timer 25 min")).toEqual({ name: "Timer", duration_seconds: 1500 });
+  });
+  it("parses English relative/named/weekday/absolute times", () => {
+    expect(parseReminderTime("in 30 minutes", NOW)!.getTime()).toBe(NOW.getTime() + 1800 * 1000);
+    expect(parseReminderTime("tomorrow at 9am", NOW)!.getDate()).toBe(2);
+    expect(parseReminderTime("next monday", NOW)!.getDate()).toBe(5);
+    expect([parseReminderTime("March 5 at 10am", NOW)!.getMonth(), parseReminderTime("March 5 at 10am", NOW)!.getDate()]).toEqual([2, 5]);
+  });
+  it("falls back to todo for unparseable English and rejects invalid dates", () => {
+    expect(classify("buy milk", NOW)).toEqual({ types: ["todo"] });
+    expect(parseReminderTime("february 30 at 8pm", NOW)).toBeNull();
+  });
+  it("does not regress Chinese behavior", () => {
+    expect(classify("明天九点开会", NOW)).toEqual({ types: ["reminder"] });
+    expect(parseTimer("计时25分钟")).toEqual({ name: "计时", duration_seconds: 1500 });
+    expect(parseReminderTime("买牛奶", NOW)).toBeNull();
+  });
+});
