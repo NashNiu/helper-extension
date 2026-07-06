@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { zhToNum, parseDuration, parseTimer, parseClock, parseReminderTime } from "./parse";
+import { zhToNum, parseDuration, parseTimer, parseClock, parseReminderTime, parseReminder, classify } from "./parse";
 
 describe("zhToNum", () => {
   it("parses arabic digits", () => {
@@ -153,5 +153,31 @@ describe("parseReminderTime - weekday & absolute", () => {
   });
   it("rejects an invalid calendar date", () => {
     expect(parseReminderTime("2月30日9点", NOW)).toBeNull();
+  });
+});
+
+describe("parseReminder", () => {
+  it("strips time words from the message", () => {
+    const r = parseReminder("明天九点提醒我开会", NOW)!;
+    expect(r.message).toBe("开会");
+    expect(new Date(r.trigger_at).getHours()).toBe(9);
+  });
+  it("returns null without a time", () => {
+    expect(parseReminder("买牛奶", NOW)).toBeNull();
+  });
+});
+
+describe("classify", () => {
+  it("classifies timer", () => {
+    expect(classify("计时25分钟", NOW)).toEqual({ types: ["timer"] });
+    expect(classify("番茄钟", NOW)).toEqual({ types: ["timer"] });
+  });
+  it("classifies reminder", () => {
+    expect(classify("明天九点开会", NOW)).toEqual({ types: ["reminder"] });
+    expect(classify("30分钟后喝水", NOW)).toEqual({ types: ["reminder"] });
+  });
+  it("falls back to todo", () => {
+    expect(classify("买牛奶", NOW)).toEqual({ types: ["todo"] });
+    expect(classify("记得买牛奶", NOW)).toEqual({ types: ["todo"] });
   });
 });

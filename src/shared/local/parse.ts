@@ -217,3 +217,44 @@ export function parseReminderTime(input: string, now: Date): Date | null {
     tryAbsolute(input, now)
   );
 }
+
+/** 剔除提醒消息中的时间词和提示词,返回纯消息。 */
+function cleanReminderMessage(input: string): string {
+  return input
+    .replace(/(大后天|大後天|后天|後天|明天|明日|明儿|今天|今日|今晚|今早|今晨)/g, "")
+    .replace(/(下(?:个|個)?)?(?:周|週|星期|礼拜|禮拜)[一二三四五六日天末]/g, "")
+    .replace(new RegExp(`(${NUM})\\s*月`, "g"), "")
+    .replace(new RegExp(`(${NUM})\\s*[日号號]`, "g"), "")
+    .replace(
+      new RegExp(
+        `(上午|早上|早晨|凌晨|中午|下午|傍晚|晚上|夜里|夜晚)?\\s*(?:${NUM})\\s*[点點:：时時]\\s*(?:(?:${NUM})|半|一刻|三刻)?\\s*分?`,
+        "g",
+      ),
+      "",
+    )
+    .replace(
+      new RegExp(
+        `(?:半\\s*(?:个|個)?\\s*(?:小时|小時|钟头|鐘頭)|(?:${NUM})\\s*(?:个|個)?\\s*(?:分钟|分鐘|分|小时|小時|钟头|鐘頭|天|日|周|週|星期|礼拜|禮拜|秒)(?:钟|鐘)?)\\s*(?:后|後|之后|之後|以后|以後)`,
+        "g",
+      ),
+      "",
+    )
+    .replace(/(提醒我?|记得|別忘了?|别忘了?|叫我|喊我|提示|闹钟|定时|定時)/g, "")
+    .trim();
+}
+
+/** 自然语言 → 提醒(消息 + ISO 触发时间);无时间返回 null。 */
+export function parseReminder(input: string, now: Date): ParsedReminder | null {
+  const at = parseReminderTime(input, now);
+  if (!at) return null;
+  const message = cleanReminderMessage(input) || input;
+  return { message, trigger_at: at.toISOString() };
+}
+
+/** 归类:timer / reminder / todo(只返回单一类型;歧义归 todo)。 */
+export function classify(input: string, now: Date): { types: AssistantType[] } {
+  const timerCue = /计时|計時|倒计时|倒計時|番茄|蕃茄|专注|專注|定时|定時/.test(input);
+  if (timerCue && parseTimer(input)) return { types: ["timer"] };
+  if (parseReminderTime(input, now)) return { types: ["reminder"] };
+  return { types: ["todo"] };
+}
