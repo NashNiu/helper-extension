@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseDurationEn, parseClockEn, tryRelativeEn, tryNamedDayEn, tryWeekdayEn, tryAbsoluteEn } from "./parseEn";
+import { parseDurationEn, parseClockEn, tryRelativeEn, tryNamedDayEn, tryWeekdayEn, tryAbsoluteEn, parseTimerEn, cleanReminderMessageEn, hasEnDateAnchorEn, EN_TIMER_CUE } from "./parseEn";
 
 describe("parseDurationEn", () => {
   it("parses minutes and hours", () => {
@@ -89,5 +89,31 @@ describe("tryAbsoluteEn", () => {
   });
   it("rejects an invalid date", () => {
     expect(tryAbsoluteEn("February 30", NOW)).toBeNull();
+  });
+});
+
+describe("parseTimerEn", () => {
+  it("parses a timer with a name", () => {
+    expect(parseTimerEn("study timer 25 min")).toEqual({ name: "study", duration_seconds: 1500 });
+  });
+  it("defaults pomodoro and default name", () => {
+    expect(parseTimerEn("pomodoro")).toEqual({ name: "Pomodoro", duration_seconds: 1500 });
+    expect(parseTimerEn("timer for 25 min")).toEqual({ name: "Timer", duration_seconds: 1500 });
+  });
+  it("returns null without a usable duration", () => {
+    expect(parseTimerEn("buy milk")).toBeNull();
+  });
+});
+
+describe("cleanReminderMessageEn", () => {
+  it("strips cue phrases and time words", () => {
+    expect(cleanReminderMessageEn("remind me to call mom tomorrow at 8pm")).toBe("call mom");
+  });
+});
+
+describe("hasEnDateAnchorEn", () => {
+  it("detects month-name dates only", () => {
+    expect(hasEnDateAnchorEn("february 30 at 8pm")).toBe(true);
+    expect(hasEnDateAnchorEn("call at 8pm")).toBe(false);
   });
 });

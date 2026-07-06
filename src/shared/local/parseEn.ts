@@ -1,3 +1,5 @@
+import type { ParsedTimer } from "./parse";
+
 /** 英文时长 → 总秒数(大小写不敏感,支持 1h30m 组合与 half an hour);无时长返回 null。 */
 export function parseDurationEn(input: string): number | null {
   const s = input.toLowerCase();
@@ -155,4 +157,53 @@ export function tryAbsoluteEn(input: string, now: Date): Date | null {
   base.setHours(clock ? clock.hour : 9, clock ? clock.minute : 0, 0, 0);
   if (base.getTime() < now.getTime()) base.setFullYear(base.getFullYear() + 1);
   return base;
+}
+
+export const EN_REMINDER_CUE = /\b(remind|remember|don'?t forget)\b/i;
+export const EN_TIMER_CUE = /\b(timer|pomodoro|countdown|focus)\b/i;
+
+/** 英文计时:时长 + 计时名;pomodoro 默认 25 分钟;无可用时长返回 null。 */
+export function parseTimerEn(input: string): ParsedTimer | null {
+  let seconds = parseDurationEn(input);
+  const isPomodoro = /\bpomodoro\b/i.test(input);
+  if (seconds == null && isPomodoro) seconds = 25 * 60;
+  if (seconds == null || seconds <= 0) return null;
+
+  const name = input
+    .replace(/\b(timer|countdown|focus|pomodoro)\b/gi, "")
+    .replace(/\bfor\b/gi, "")
+    .replace(/\bhalf\s+(?:an?\s+)?hour\b/gi, "")
+    .replace(/(\d+)\s*(?:hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)(?![a-z])/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (name) return { name, duration_seconds: seconds };
+  return { name: isPomodoro ? "Pomodoro" : "Timer", duration_seconds: seconds };
+}
+
+/** 英文月名日期锚点检测(供 tryClockOnly 守卫,避免非法日期被纯时刻救回)。 */
+export function hasEnDateAnchorEn(input: string): boolean {
+  const s = input.toLowerCase();
+  return (
+    new RegExp(`\\b(?:${EN_MONTH_RE})\\s+\\d{1,2}(?:st|nd|rd|th)?\\b`).test(s) ||
+    new RegExp(`\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?(?:${EN_MONTH_RE})\\b`).test(s)
+  );
+}
+
+/** 剔除英文提醒消息中的提示词与时间词,返回纯消息(镜像中文清洗)。 */
+export function cleanReminderMessageEn(input: string): string {
+  return input
+    .replace(/\b(remind me to|remind me|remember to|remember|don'?t forget to|don'?t forget)\b/gi, "")
+    .replace(/\bin\s+(?:\d+|an?)\s*(?:minutes?|mins?|hours?|hrs?|days?|weeks?|seconds?|secs?)\b/gi, "")
+    .replace(/\bin\s+half\s+(?:an?\s+)?hour\b/gi, "")
+    .replace(/\b(the day after tomorrow|tomorrow|today|tonight)\b/gi, "")
+    .replace(/\b(next\s+)?(sunday|sun|monday|mon|tuesday|tues|tue|wednesday|wed|thursday|thurs|thur|thu|friday|fri|saturday|sat)\b/gi, "")
+    .replace(new RegExp(`\\b(?:${EN_MONTH_RE})\\s+\\d{1,2}(?:st|nd|rd|th)?\\b`, "gi"), "")
+    .replace(new RegExp(`\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?(?:${EN_MONTH_RE})\\b`, "gi"), "")
+    .replace(/\bat\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b/gi, "")
+    .replace(/\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/gi, "")
+    .replace(/\b\d{1,2}:\d{2}\b/gi, "")
+    .replace(/\b(noon|midnight)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
