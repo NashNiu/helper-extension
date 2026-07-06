@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseDurationEn, parseClockEn, tryRelativeEn, tryNamedDayEn } from "./parseEn";
+import { parseDurationEn, parseClockEn, tryRelativeEn, tryNamedDayEn, tryWeekdayEn, tryAbsoluteEn } from "./parseEn";
 
 describe("parseDurationEn", () => {
   it("parses minutes and hours", () => {
@@ -65,5 +65,29 @@ describe("tryNamedDayEn", () => {
   it("defaults to 09:00 and handles day-after-tomorrow", () => {
     expect([tryNamedDayEn("today", NOW)!.getDate(), tryNamedDayEn("today", NOW)!.getHours()]).toEqual([1, 9]);
     expect(tryNamedDayEn("the day after tomorrow", NOW)!.getDate()).toBe(3);
+  });
+});
+
+describe("tryWeekdayEn", () => {
+  it("parses next upcoming weekday", () => {
+    // Thu → Fri = Jan 2
+    expect([tryWeekdayEn("friday 10am", NOW)!.getMonth(), tryWeekdayEn("friday 10am", NOW)!.getDate(), tryWeekdayEn("friday 10am", NOW)!.getHours()])
+      .toEqual([0, 2, 10]);
+  });
+  it("parses 'next monday' as next calendar week", () => {
+    // Thu Jan 1 → next week Monday = Jan 5
+    expect([tryWeekdayEn("next monday", NOW)!.getDate(), tryWeekdayEn("next monday", NOW)!.getHours()]).toEqual([5, 9]);
+  });
+});
+
+describe("tryAbsoluteEn", () => {
+  it("parses month-name dates in both orders", () => {
+    expect([tryAbsoluteEn("March 5 at 10am", NOW)!.getMonth(), tryAbsoluteEn("March 5 at 10am", NOW)!.getDate(), tryAbsoluteEn("March 5 at 10am", NOW)!.getHours()])
+      .toEqual([2, 5, 10]);
+    expect([tryAbsoluteEn("5 March", NOW)!.getMonth(), tryAbsoluteEn("5 March", NOW)!.getDate()]).toEqual([2, 5]);
+    expect([tryAbsoluteEn("Jan 3rd", NOW)!.getMonth(), tryAbsoluteEn("Jan 3rd", NOW)!.getDate()]).toEqual([0, 3]);
+  });
+  it("rejects an invalid date", () => {
+    expect(tryAbsoluteEn("February 30", NOW)).toBeNull();
   });
 });

@@ -89,3 +89,70 @@ export function tryNamedDayEn(input: string, now: Date): Date | null {
   }
   return null;
 }
+
+const EN_WEEKDAY: Record<string, number> = {
+  sunday: 0, sun: 0, monday: 1, mon: 1, tuesday: 2, tues: 2, tue: 2,
+  wednesday: 3, wed: 3, thursday: 4, thurs: 4, thur: 4, thu: 4,
+  friday: 5, fri: 5, saturday: 6, sat: 6,
+};
+
+/** 英文星期 → Date;next X = 下一自然周(周一起点),裸 X = 下一次到来(不含今天);无时刻默认 09:00。 */
+export function tryWeekdayEn(input: string, now: Date): Date | null {
+  const s = input.toLowerCase();
+  const m = s.match(
+    /\b(next\s+)?(sunday|sun|monday|mon|tuesday|tues|tue|wednesday|wed|thursday|thurs|thur|thu|friday|fri|saturday|sat)\b/,
+  );
+  if (!m) return null;
+  const target = EN_WEEKDAY[m[2]];
+  if (target == null) return null;
+
+  const base = new Date(now);
+  if (m[1]) {
+    const mondayOffset = (base.getDay() + 6) % 7;
+    base.setDate(base.getDate() - mondayOffset + 7);
+    base.setDate(base.getDate() + ((target + 6) % 7));
+  } else {
+    let diff = (target - base.getDay() + 7) % 7;
+    if (diff === 0) diff = 7;
+    base.setDate(base.getDate() + diff);
+  }
+  const clock = parseClockEn(input);
+  base.setHours(clock ? clock.hour : 9, clock ? clock.minute : 0, 0, 0);
+  return base;
+}
+
+const EN_MONTHS: Record<string, number> = {
+  january: 1, jan: 1, february: 2, feb: 2, march: 3, mar: 3, april: 4, apr: 4,
+  may: 5, june: 6, jun: 6, july: 7, jul: 7, august: 8, aug: 8,
+  september: 9, sept: 9, sep: 9, october: 10, oct: 10, november: 11, nov: 11,
+  december: 12, dec: 12,
+};
+
+/** 月名正则片段(供 tryAbsoluteEn / cleanReminderMessageEn / hasEnDateAnchorEn 复用)。 */
+export const EN_MONTH_RE =
+  "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t)?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
+
+/** 英文绝对日期(仅月名形式,支持序数后缀)→ Date;非法日期 null;已过→明年;无时刻默认 09:00。 */
+export function tryAbsoluteEn(input: string, now: Date): Date | null {
+  const s = input.toLowerCase();
+  let month = -1;
+  let day = -1;
+
+  let m = s.match(new RegExp(`\\b(${EN_MONTH_RE})\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`));
+  if (m) { month = EN_MONTHS[m[1]]; day = parseInt(m[2], 10); }
+  else {
+    m = s.match(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${EN_MONTH_RE})\\b`));
+    if (m) { day = parseInt(m[1], 10); month = EN_MONTHS[m[2]]; }
+  }
+  if (month < 1 || day < 1 || day > 31) return null;
+
+  const base = new Date(now);
+  base.setDate(1);
+  base.setMonth(month - 1);
+  base.setDate(day);
+  if (base.getDate() !== day) return null; // 非法日期(如 Feb 30)溢出
+  const clock = parseClockEn(input);
+  base.setHours(clock ? clock.hour : 9, clock ? clock.minute : 0, 0, 0);
+  if (base.getTime() < now.getTime()) base.setFullYear(base.getFullYear() + 1);
+  return base;
+}
