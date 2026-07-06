@@ -73,4 +73,10 @@ describe("parseClock", () => {
   it("returns null without a clock", () => {
     expect(parseClock("开会")).toBeNull();
   });
+  it("normalizes midnight period to 0", () => {
+    expect(parseClock("凌晨十二点")).toEqual({ hour: 0, minute: 0 });
+  });
+  it("rejects an out-of-range hour", () => {
+    expect(parseClock("25点")).toBeNull();
+  });
 });
