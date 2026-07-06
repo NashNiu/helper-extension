@@ -82,7 +82,7 @@ export function parseTimer(input: string): ParsedTimer | null {
   let seconds = parseDuration(input);
   const isPomodoro = /番茄|蕃茄/.test(input);
   if (seconds == null && isPomodoro) seconds = 25 * 60;
-  if (seconds == null || seconds <= 0) return parseTimerEn(input);
+  if (seconds == null || seconds <= 0) return /[一-鿿]/.test(input) ? null : parseTimerEn(input);
 
   const name = input
     .replace(/(计时|計時|倒计时|倒計時|定时|定時|番茄钟?|蕃茄钟?|专注|專注)/g, "")
@@ -240,17 +240,22 @@ function tryClockOnly(input: string, now: Date): Date | null {
 
 /** 自然语言 → 触发时间。识别不到时间返回 null。 */
 export function parseReminderTime(input: string, now: Date): Date | null {
-  return (
+  const zh =
     tryRelative(input, now) ??
     tryNamedDay(input, now) ??
     tryWeekday(input, now) ??
-    tryAbsolute(input, now) ??
-    tryRelativeEn(input, now) ??
-    tryNamedDayEn(input, now) ??
-    tryWeekdayEn(input, now) ??
-    tryAbsoluteEn(input, now) ??
-    tryClockOnly(input, now)
-  );
+    tryAbsolute(input, now);
+  if (zh) return zh;
+  // 英文分支仅在纯非中文输入上运行,避免中文串里夹带的英文单词(如"看sunday的邮件")被误判为提醒。
+  if (!/[一-鿿]/.test(input)) {
+    const en =
+      tryRelativeEn(input, now) ??
+      tryNamedDayEn(input, now) ??
+      tryWeekdayEn(input, now) ??
+      tryAbsoluteEn(input, now);
+    if (en) return en;
+  }
+  return tryClockOnly(input, now);
 }
 
 /** 剔除提醒消息中的时间词和提示词,返回纯消息。 */

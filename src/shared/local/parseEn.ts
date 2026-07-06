@@ -101,9 +101,7 @@ const EN_WEEKDAY: Record<string, number> = {
 /** 英文星期 → Date;next X = 下一自然周(周一起点),裸 X = 下一次到来(不含今天);无时刻默认 09:00。 */
 export function tryWeekdayEn(input: string, now: Date): Date | null {
   const s = input.toLowerCase();
-  const m = s.match(
-    /\b(next\s+)?(sunday|sun|monday|mon|tuesday|tues|tue|wednesday|wed|thursday|thurs|thur|thu|friday|fri|saturday|sat)\b/,
-  );
+  const m = s.match(/\b(next\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
   if (!m) return null;
   const target = EN_WEEKDAY[m[2]];
   if (target == null) return null;
@@ -197,7 +195,7 @@ export function cleanReminderMessageEn(input: string): string {
     .replace(/\bin\s+(?:\d+|an?)\s*(?:minutes?|mins?|hours?|hrs?|days?|weeks?|seconds?|secs?)\b/gi, "")
     .replace(/\bin\s+half\s+(?:an?\s+)?hour\b/gi, "")
     .replace(/\b(the day after tomorrow|tomorrow|today|tonight)\b/gi, "")
-    .replace(/\b(next\s+)?(sunday|sun|monday|mon|tuesday|tues|tue|wednesday|wed|thursday|thurs|thur|thu|friday|fri|saturday|sat)\b/gi, "")
+    .replace(/\b(next\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/gi, "")
     .replace(new RegExp(`\\b(?:${EN_MONTH_RE})\\s+\\d{1,2}(?:st|nd|rd|th)?\\b`, "gi"), "")
     .replace(new RegExp(`\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?(?:${EN_MONTH_RE})\\b`, "gi"), "")
     .replace(/\bat\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b/gi, "")

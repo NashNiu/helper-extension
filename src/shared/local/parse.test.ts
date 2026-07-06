@@ -235,3 +235,19 @@ describe("English integration via parse.ts entry points", () => {
     expect(parseReminderTime("买牛奶", NOW)).toBeNull();
   });
 });
+
+describe("English collision & mixed-language guards", () => {
+  it("does not treat a bare English word 'sun'/'sat' as a weekday", () => {
+    // 'sun' is not a full weekday name → clock-only reminder tonight 20:00, not Sunday
+    const at = parseReminderTime("the sun is up remind me at 8pm", NOW)!;
+    expect([at.getMonth(), at.getDate(), at.getHours()]).toEqual([0, 1, 20]);
+  });
+  it("does not run English date branches on CJK input", () => {
+    expect(classify("看sunday的邮件", NOW)).toEqual({ types: ["todo"] });
+    expect(parseReminderTime("看sunday的邮件", NOW)).toBeNull();
+  });
+  it("still parses full English weekday names", () => {
+    expect(parseReminderTime("next monday", NOW)!.getDate()).toBe(5);
+    expect(parseReminderTime("friday 10am", NOW)!.getDate()).toBe(2);
+  });
+});
