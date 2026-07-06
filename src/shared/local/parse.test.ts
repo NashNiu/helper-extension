@@ -181,3 +181,21 @@ describe("classify", () => {
     expect(classify("记得买牛奶", NOW)).toEqual({ types: ["todo"] });
   });
 });
+
+describe("parseReminderTime - clock only (no day)", () => {
+  it("uses today when the time is still ahead", () => {
+    const at = parseReminderTime("晚上8点吃药", NOW)!;
+    expect([at.getMonth(), at.getDate(), at.getHours(), at.getMinutes()]).toEqual([0, 1, 20, 0]);
+  });
+  it("parses a bare hour later today", () => {
+    const at = parseReminderTime("九点开会", NOW)!;
+    expect([at.getDate(), at.getHours()]).toEqual([1, 9]);
+  });
+  it("rolls to tomorrow when the time already passed", () => {
+    const at = parseReminderTime("凌晨1点提醒我", NOW)!;
+    expect([at.getDate(), at.getHours()]).toEqual([2, 1]);
+  });
+  it("classifies a bare clock time as a reminder", () => {
+    expect(classify("晚上8点吃药", NOW)).toEqual({ types: ["reminder"] });
+  });
+});
