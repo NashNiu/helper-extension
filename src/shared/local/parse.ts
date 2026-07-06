@@ -85,3 +85,35 @@ export function parseTimer(input: string): ParsedTimer | null {
   if (name) return { name, duration_seconds: seconds };
   return { name: isPomodoro ? "番茄钟" : "计时", duration_seconds: seconds };
 }
+
+/** 解析「几点几分」并应用时段(下午/晚上 +12 等);无时刻返回 null。 */
+export function parseClock(input: string): { hour: number; minute: number } | null {
+  const re = new RegExp(
+    `(上午|早上|早晨|凌晨|中午|下午|傍晚|晚上|夜里|夜晚)?\\s*(${NUM})\\s*[点點:：时時]\\s*(半|一刻|三刻|(?:${NUM}))?\\s*分?`,
+  );
+  const m = input.match(re);
+  if (!m) return null;
+
+  let hour = zhToNum(m[2]);
+  if (hour == null || hour > 23) return null;
+
+  let minute = 0;
+  const mm = m[3];
+  if (mm === "半") minute = 30;
+  else if (mm === "一刻") minute = 15;
+  else if (mm === "三刻") minute = 45;
+  else if (mm) {
+    const v = zhToNum(mm);
+    if (v != null && v < 60) minute = v;
+  }
+
+  const period = m[1];
+  if ((period === "下午" || period === "傍晚" || period === "晚上" || period === "夜里" || period === "夜晚") && hour < 12) {
+    hour += 12;
+  }
+  if (period === "中午" && hour < 12) hour = 12;
+  if ((period === "凌晨" || period === "早上" || period === "早晨" || period === "上午") && hour === 12) {
+    hour = 0;
+  }
+  return { hour, minute };
+}

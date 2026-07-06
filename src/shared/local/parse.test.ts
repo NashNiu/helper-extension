@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { zhToNum, parseDuration, parseTimer } from "./parse";
+import { zhToNum, parseDuration, parseTimer, parseClock } from "./parse";
 
 describe("zhToNum", () => {
   it("parses arabic digits", () => {
@@ -55,5 +55,22 @@ describe("parseTimer", () => {
   });
   it("returns null without a usable duration", () => {
     expect(parseTimer("买牛奶")).toBeNull();
+  });
+});
+
+describe("parseClock", () => {
+  it("parses chinese hour", () => {
+    expect(parseClock("九点")).toEqual({ hour: 9, minute: 0 });
+  });
+  it("parses half and quarter", () => {
+    expect(parseClock("九点半")).toEqual({ hour: 9, minute: 30 });
+    expect(parseClock("下午三点一刻")).toEqual({ hour: 15, minute: 15 });
+  });
+  it("parses colon form and afternoon", () => {
+    expect(parseClock("晚上8点30")).toEqual({ hour: 20, minute: 30 });
+    expect(parseClock("15:45")).toEqual({ hour: 15, minute: 45 });
+  });
+  it("returns null without a clock", () => {
+    expect(parseClock("开会")).toBeNull();
   });
 });
