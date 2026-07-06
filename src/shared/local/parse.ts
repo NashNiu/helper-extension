@@ -38,3 +38,29 @@ export function zhToNum(s: string): number | null {
   }
   return null;
 }
+
+/** 解析时长(分/时/秒,含"半小时"),返回总秒数;无时长返回 null。 */
+export function parseDuration(input: string): number | null {
+  let total = 0;
+  let found = false;
+
+  const h = input.match(new RegExp(`(${NUM})\\s*(?:个|個)?\\s*(?:小时|小時|钟头|鐘頭)`));
+  if (h) {
+    const n = zhToNum(h[1]);
+    if (n != null) { total += n * 3600; found = true; }
+  }
+  if (/半\s*(?:个|個)?\s*(?:小时|小時|钟头|鐘頭)/.test(input)) {
+    total += 1800; found = true;
+  }
+  const m = input.match(new RegExp(`(${NUM})\\s*(?:分钟|分鐘|分)`));
+  if (m) {
+    const n = zhToNum(m[1]);
+    if (n != null) { total += n * 60; found = true; }
+  }
+  const s = input.match(new RegExp(`(${NUM})\\s*(?:秒钟?|秒鐘?)`));
+  if (s) {
+    const n = zhToNum(s[1]);
+    if (n != null) { total += n; found = true; }
+  }
+  return found ? total : null;
+}

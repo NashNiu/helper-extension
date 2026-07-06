@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { zhToNum } from "./parse";
+import { zhToNum, parseDuration } from "./parse";
 
 describe("zhToNum", () => {
   it("parses arabic digits", () => {
@@ -20,5 +20,25 @@ describe("zhToNum", () => {
     expect(zhToNum("百")).toBeNull();
     expect(zhToNum("abc")).toBeNull();
     expect(zhToNum("")).toBeNull();
+  });
+});
+
+describe("parseDuration", () => {
+  it("parses minutes", () => {
+    expect(parseDuration("25分钟")).toBe(25 * 60);
+    expect(parseDuration("番茄25分")).toBe(25 * 60);
+  });
+  it("parses hours and combined", () => {
+    expect(parseDuration("1小时")).toBe(3600);
+    expect(parseDuration("1小时30分")).toBe(90 * 60);
+    expect(parseDuration("半小时")).toBe(1800);
+  });
+  it("parses seconds and chinese numerals", () => {
+    expect(parseDuration("90秒")).toBe(90);
+    expect(parseDuration("二十分钟")).toBe(20 * 60);
+  });
+  it("returns null when no duration", () => {
+    expect(parseDuration("开会")).toBeNull();
+    expect(parseDuration("明天九点")).toBeNull();
   });
 });
