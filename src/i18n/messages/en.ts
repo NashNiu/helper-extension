@@ -71,6 +71,8 @@ export const en = {
   "widget.phaseDone": "Phase done",
   "widget.next": "Next",
   "widget.openAria": "Open timer",
+  "widget.collapseAria": "Collapse timer",
+  "widget.expandAria": "Expand timer",
 
   "profile.title": "Profile",
   "profile.backAria": "Back",

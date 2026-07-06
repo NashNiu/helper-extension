@@ -73,6 +73,8 @@ export const zhHant: Record<keyof typeof en, string> = {
   "widget.phaseDone": "階段完成",
   "widget.next": "下一步",
   "widget.openAria": "開啟計時",
+  "widget.collapseAria": "收合計時",
+  "widget.expandAria": "展開計時",
 
   "profile.title": "個人中心",
   "profile.backAria": "返回",

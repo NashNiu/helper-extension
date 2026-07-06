@@ -24,6 +24,7 @@ export default function App() {
   }
 
   const loggedIn = status === "in";
+  const showWidget = tab !== "timer" && !showProfile;
   // 登录态切换后，列表数据源也随之切换（本地 ↔ 后端），需强制各视图重新加载。
   const bump = () => setRefreshKey((k) => k + 1);
 
@@ -43,7 +44,7 @@ export default function App() {
   }
 
   return (
-    <div className="relative flex h-full flex-col bg-ground">
+    <div className="relative flex h-full flex-col overflow-x-clip bg-ground">
       <TabBar
         value={tab}
         onChange={setTab}
@@ -61,7 +62,7 @@ export default function App() {
         {tab === "clipboard" && <ClipboardView refreshKey={refreshKey} />}
       </main>
 
-      {tab !== "timer" && !showProfile && <TimerWidget onOpen={() => setTab("timer")} />}
+      {showWidget && <TimerWidget onOpen={() => setTab("timer")} />}
 
       {showProfile && (
         <ProfileView
