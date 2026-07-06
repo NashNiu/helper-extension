@@ -211,12 +211,12 @@ function tryAbsolute(input: string, now: Date): Date | null {
 // 无日期的纯时刻(如"晚上8点""九点""15:45"):默认今天,已过则顺延到明天。
 // 若输入含日期锚点(月日、命名日、星期、相对时长后缀)则不处理,让上层分支负责。
 function tryClockOnly(input: string, now: Date): Date | null {
-  const hasDateAnchor =
-    /[日号號]/.test(input) ||
-    /大后天|大後天|后天|後天|明天|明日|明儿|今天|今日|今晚|今早|今晨/.test(input) ||
-    /(?:周|週|星期|礼拜|禮拜)[一二三四五六日天末]/.test(input) ||
-    /(?:后|後|之后|之後|以后|以後)/.test(input);
-  if (hasDateAnchor) return null;
+  // 仅当输入含"数字+月/日/号"这种被 tryAbsolute 拒绝(如非法日期 2月30日)后残留的日期锚点时,才放弃纯时刻解析。
+  // 用数字前缀避免误伤"每日/生日/日常"等非日期词。
+  const hasNumericDateAnchor =
+    new RegExp(`(?:${NUM})\\s*月`).test(input) ||
+    new RegExp(`(?:${NUM})\\s*[日号號]`).test(input);
+  if (hasNumericDateAnchor) return null;
   const clock = parseClock(input);
   if (!clock) return null;
   const base = new Date(now);

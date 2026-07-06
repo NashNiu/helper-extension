@@ -198,4 +198,12 @@ describe("parseReminderTime - clock only (no day)", () => {
   it("classifies a bare clock time as a reminder", () => {
     expect(classify("晚上8点吃药", NOW)).toEqual({ types: ["reminder"] });
   });
+  it("does not treat 每日 / 生日 as a date anchor", () => {
+    const at = parseReminderTime("每日9点吃药", NOW)!;
+    expect([at.getDate(), at.getHours()]).toEqual([1, 9]);
+    expect(classify("每日9点吃药", NOW)).toEqual({ types: ["reminder"] });
+  });
+  it("still rejects a leftover invalid numeric date", () => {
+    expect(parseReminderTime("2月30日9点", NOW)).toBeNull();
+  });
 });
