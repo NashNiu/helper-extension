@@ -38,3 +38,23 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .animate-slide-in-right { animation: none; }
 }
+
+/* 计时小组件展开:自右侧边缘滑出淡入(起点在 right-3 留白内,不溢出) */
+@keyframes widget-in {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-widget-in {
+  animation: widget-in 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+/* 收起把手贴在 right-0,故从内侧(负向)滑入,避免向右溢出产生横向滚动条 */
+@keyframes widget-tab-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-widget-tab-in {
+  animation: widget-tab-in 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-widget-in, .animate-widget-tab-in { animation: none; }
+}

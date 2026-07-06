@@ -4,8 +4,8 @@ import {
   resumeTimer,
   restartPhase,
   advancePhase,
-  cancelTimer,
 } from "../../shared/timerControl";
+import { useState } from "react";
 import { useCountdown } from "./useCountdown";
 import { Button } from "../../components/Button";
 import { useT } from "../../i18n/react";
@@ -53,6 +53,14 @@ function ClockIcon() {
   );
 }
 
+function ChevronRightIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="9 6 15 12 9 18" />
+    </svg>
+  );
+}
+
 const smBtn = "px-2 py-1 text-xs";
 const smOutline = "border border-line px-2 py-1 text-xs";
 
@@ -60,6 +68,8 @@ const smOutline = "border border-line px-2 py-1 text-xs";
 export function TimerWidget({ onOpen }: { onOpen: () => void }) {
   const t = useT();
   const { timer, remaining, refresh } = useCountdown();
+  // 默认收起为右边缘小胶囊，尽量不遮挡列表；点开才展开完整控制。
+  const [collapsed, setCollapsed] = useState(true);
   if (!timer) return null;
 
   const session = timer.session;
@@ -82,20 +92,43 @@ export function TimerWidget({ onOpen }: { onOpen: () => void }) {
   const timeColor = paused ? "text-muted" : isWork ? "text-ink" : "text-accent";
   const Icon = finished ? ClockIcon : isWork ? FlameIcon : CupIcon;
   const iconColor = isWork ? "text-danger" : "text-accent";
+  const chipBg = isWork ? "bg-danger/10" : "bg-accent-soft";
+
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        onClick={() => setCollapsed(false)}
+        aria-label={t("widget.expandAria")}
+        title={`${title} · ${timeText}`}
+        className="animate-widget-tab-in group absolute bottom-3 right-0 z-30 flex flex-col items-center gap-0.5 rounded-l-lg border border-r-0 border-line bg-surface/90 py-1.5 pl-1.5 pr-1 shadow-md backdrop-blur-sm transition hover:border-accent/60 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      >
+        <span className={`${iconColor} [&>svg]:h-4 [&>svg]:w-4`}>
+          <Icon />
+        </span>
+        {!awaiting && (
+          <span className={`font-mono text-[10px] font-bold leading-none tabular-nums ${timeColor}`}>{fmt(remaining)}</span>
+        )}
+      </button>
+    );
+  }
 
   return (
-    <button
-      onClick={onOpen}
-      aria-label={t("widget.openAria")}
-      className="absolute bottom-3 right-3 z-30 flex min-w-[210px] max-w-[calc(100%-1.5rem)] items-center gap-2.5 rounded-2xl border border-line bg-surface px-3 py-2.5 text-left shadow-xl transition hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-    >
-      <span className={`shrink-0 ${iconColor}`}>
-        <Icon />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs text-muted">{title}</span>
-        <span className={`block font-mono text-lg font-bold tabular-nums ${timeColor}`}>{timeText}</span>
-      </span>
+    <div className="animate-widget-in absolute bottom-3 right-3 z-30 flex min-w-[210px] max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-2xl border border-line bg-surface/95 py-2.5 pl-2.5 pr-1.5 shadow-lg backdrop-blur-sm transition focus-within:border-accent/60 hover:border-accent/60">
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={t("widget.openAria")}
+        className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      >
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${chipBg} ${iconColor}`}>
+          <Icon />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-xs text-muted">{title}</span>
+          <span className={`block font-mono text-lg font-bold leading-tight tabular-nums ${timeColor}`}>{timeText}</span>
+        </span>
+      </button>
       <span className="flex shrink-0 flex-col gap-1">
         {running && (
           <Button className={smBtn} onClick={act(pauseTimer)}>
@@ -112,17 +145,20 @@ export function TimerWidget({ onOpen }: { onOpen: () => void }) {
             {t("timer.reset")}
           </Button>
         )}
-        {(running || paused) && (
-          <Button variant="ghost" className={`${smOutline} text-danger`} onClick={act(cancelTimer)}>
-            {session ? t("timer.endPomodoro") : t("action.cancel")}
-          </Button>
-        )}
         {awaiting && (
           <Button className={smBtn} onClick={act(advancePhase)}>
             {finished ? t("timer.finish") : t("widget.next")}
           </Button>
         )}
       </span>
-    </button>
+      <button
+        type="button"
+        onClick={() => setCollapsed(true)}
+        aria-label={t("widget.collapseAria")}
+        className="flex shrink-0 items-center self-stretch rounded-r-lg border-l border-line pl-1 text-muted transition hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      >
+        <ChevronRightIcon />
+      </button>
+    </div>
   );
 }
