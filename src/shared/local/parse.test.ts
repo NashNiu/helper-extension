@@ -116,3 +116,26 @@ describe("parseReminderTime - named day", () => {
     expect([at.getDate(), at.getHours(), at.getMinutes()]).toEqual([2, 9, 0]);
   });
 });
+
+describe("parseReminderTime - weekday & absolute", () => {
+  it("parses 周五 as the next friday", () => {
+    // 周四 → 周五 = 次日 1/2
+    const at = parseReminderTime("周五10点面试", NOW)!;
+    expect([at.getMonth(), at.getDate(), at.getHours()]).toEqual([0, 2, 10]);
+  });
+  it("parses 下周一", () => {
+    // 周四 → 下周一 = 1/5
+    const at = parseReminderTime("下周一开会", NOW)!;
+    expect([at.getMonth(), at.getDate(), at.getHours()]).toEqual([0, 5, 9]);
+  });
+  it("parses 月日 absolute", () => {
+    const at = parseReminderTime("3月5日上午十点体检", NOW)!;
+    expect([at.getMonth(), at.getDate(), at.getHours()]).toEqual([2, 5, 10]);
+  });
+  it("rolls day-only past date to next month", () => {
+    // NOW=1/1;"1号" 已过(1/1 09:00 > 08:00 之前?)这里用明确过去日:测 1 号 08:00 之前
+    const at = parseReminderTime("每月1号9点还款", NOW)!;
+    // 1/1 09:00 晚于 NOW(08:00),仍是本月 1 号
+    expect([at.getMonth(), at.getDate(), at.getHours()]).toEqual([0, 1, 9]);
+  });
+});

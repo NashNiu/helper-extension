@@ -160,7 +160,51 @@ function tryNamedDay(input: string, now: Date): Date | null {
   return null;
 }
 
+function tryWeekday(input: string, now: Date): Date | null {
+  const m = input.match(
+    /(下(?:个|個)?(?:周|週|星期|礼拜|禮拜)|下(?:周|週)|这(?:周|週|星期)|本(?:周|週))?\s*(?:周|週|星期|礼拜|禮拜)([一二三四五六日天末])/,
+  );
+  if (!m) return null;
+  const map: Record<string, number> = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 日: 0, 天: 0, 末: 6 };
+  const target = map[m[2]];
+  if (target == null) return null;
+  const base = new Date(now);
+  let diff = (target - base.getDay() + 7) % 7;
+  if (diff === 0) diff = 7; // 取下一次,不含今天
+  if (m[1] && /下/.test(m[1])) diff += 7;
+  base.setDate(base.getDate() + diff);
+  const clock = parseClock(input);
+  base.setHours(clock ? clock.hour : 9, clock ? clock.minute : 0, 0, 0);
+  return base;
+}
+
+function tryAbsolute(input: string, now: Date): Date | null {
+  const m = input.match(new RegExp(`(?:(${NUM})\\s*月)?\\s*(${NUM})\\s*[日号號]`));
+  if (!m) return null;
+  const day = zhToNum(m[2]);
+  if (day == null || day < 1 || day > 31) return null;
+  const base = new Date(now);
+  const hasMonth = m[1] != null;
+  const month = hasMonth ? (zhToNum(m[1]) ?? NaN) - 1 : base.getMonth();
+  if (Number.isNaN(month) || month < 0 || month > 11) return null;
+  base.setDate(1);
+  base.setMonth(month);
+  base.setDate(day);
+  const clock = parseClock(input);
+  base.setHours(clock ? clock.hour : 9, clock ? clock.minute : 0, 0, 0);
+  if (base.getTime() < now.getTime()) {
+    if (hasMonth) base.setFullYear(base.getFullYear() + 1);
+    else base.setMonth(base.getMonth() + 1);
+  }
+  return base;
+}
+
 /** 自然语言 → 触发时间。识别不到时间返回 null。 */
 export function parseReminderTime(input: string, now: Date): Date | null {
-  return tryRelative(input, now) ?? tryNamedDay(input, now);
+  return (
+    tryRelative(input, now) ??
+    tryNamedDay(input, now) ??
+    tryWeekday(input, now) ??
+    tryAbsolute(input, now)
+  );
 }
