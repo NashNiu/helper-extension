@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseDurationEn } from "./parseEn";
+import { parseDurationEn, parseClockEn } from "./parseEn";
 
 describe("parseDurationEn", () => {
   it("parses minutes and hours", () => {
@@ -20,5 +20,25 @@ describe("parseDurationEn", () => {
   it("returns null without a duration", () => {
     expect(parseDurationEn("buy milk")).toBeNull();
     expect(parseDurationEn("8pm")).toBeNull();
+  });
+});
+
+describe("parseClockEn", () => {
+  it("parses am/pm", () => {
+    expect(parseClockEn("8pm")).toEqual({ hour: 20, minute: 0 });
+    expect(parseClockEn("8:30 pm")).toEqual({ hour: 20, minute: 30 });
+    expect(parseClockEn("8am")).toEqual({ hour: 8, minute: 0 });
+    expect(parseClockEn("12am")).toEqual({ hour: 0, minute: 0 });
+  });
+  it("parses 24h colon and 'at N'", () => {
+    expect(parseClockEn("15:45")).toEqual({ hour: 15, minute: 45 });
+    expect(parseClockEn("at 3")).toEqual({ hour: 3, minute: 0 });
+  });
+  it("parses noon and midnight", () => {
+    expect(parseClockEn("noon")).toEqual({ hour: 12, minute: 0 });
+    expect(parseClockEn("midnight")).toEqual({ hour: 0, minute: 0 });
+  });
+  it("ignores bare numbers with no clock signal", () => {
+    expect(parseClockEn("buy 5 apples")).toBeNull();
   });
 });
