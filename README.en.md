@@ -2,7 +2,7 @@
 
 [中文](README.md)
 
-A Chrome Side Panel extension: capture reminders, timers, and todos in one sentence. **Works without login** — data is stored locally; sign in to sync with your account.
+A Chrome Side Panel extension: capture reminders, timers, and todos in one sentence. **Local-first, private, works offline** — all data stays in your browser.
 
 ## Tech Stack
 
@@ -21,7 +21,7 @@ A Chrome Side Panel extension: capture reminders, timers, and todos in one sente
 | Todo | Task list with pagination + infinite scroll |
 | Reminders | System notification on due; fired by background alarms |
 | Timer | Classic pomodoro cycles (work/break, long break every 4th), pause/resume/reset, estimated end, floating widget |
-| Quick add | Natural-language input in the top bar, auto-routed to reminder / timer / todo |
+| Quick add | Natural-language input in the top bar, **local rule-based parsing** auto-routes to reminder / timer / todo (offline, zero backend) |
 | Profile | Open via the top-right avatar to view completed todos & past reminders; sign in / out |
 
 ## Getting Started
@@ -70,7 +70,7 @@ src/
 
 Each `shared/api/*` module branches internally on `hasToken()`: **logged in** hits the backend REST API, **logged out** reads/writes `chrome.storage.local`. Call sites are unaware; views reload via `refreshKey` when the auth state changes.
 
-While logged out, quick-add uses rate-limited **anonymous** backend endpoints (`/api/public/*`) for AI parsing, so the AI key always stays server-side.
+Quick-add parsing is performed by the extension's embedded **local rule-based parser** (`src/shared/local/parse.ts`), supporting common time and duration expressions in Chinese with zero backend calls. Advanced AI parsing for complex or colloquial phrasing is planned for the Pro tier.
 
 ### Background scheduling
 
