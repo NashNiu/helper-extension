@@ -64,3 +64,24 @@ export function parseDuration(input: string): number | null {
   }
   return found ? total : null;
 }
+
+/** 解析计时:提取时长 + 计时名。无时长且非番茄钟返回 null。 */
+export function parseTimer(input: string): ParsedTimer | null {
+  let seconds = parseDuration(input);
+  const isPomodoro = /番茄|蕃茄/.test(input);
+  if (seconds == null && isPomodoro) seconds = 25 * 60;
+  if (seconds == null || seconds <= 0) return null;
+
+  const name = input
+    .replace(/(计时|計時|倒计时|倒計時|定时|定時|番茄钟?|蕃茄钟?|专注|專注)/g, "")
+    .replace(/半\s*(?:个|個)?\s*(?:小时|小時|钟头|鐘頭)/g, "")
+    .replace(
+      new RegExp(`(${NUM})\\s*(?:个|個)?\\s*(?:小时|小時|钟头|鐘頭|分钟|分鐘|分|秒钟?|秒鐘?)`, "g"),
+      "",
+    )
+    .replace(/\s+/g, "")
+    .trim();
+
+  if (name) return { name, duration_seconds: seconds };
+  return { name: isPomodoro ? "番茄钟" : "计时", duration_seconds: seconds };
+}

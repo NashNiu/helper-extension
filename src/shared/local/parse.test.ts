@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { zhToNum, parseDuration } from "./parse";
+import { zhToNum, parseDuration, parseTimer } from "./parse";
 
 describe("zhToNum", () => {
   it("parses arabic digits", () => {
@@ -40,5 +40,20 @@ describe("parseDuration", () => {
   it("returns null when no duration", () => {
     expect(parseDuration("开会")).toBeNull();
     expect(parseDuration("明天九点")).toBeNull();
+  });
+});
+
+describe("parseTimer", () => {
+  it("parses duration with a name", () => {
+    expect(parseTimer("背单词计时25分钟")).toEqual({ name: "背单词", duration_seconds: 1500 });
+  });
+  it("defaults pomodoro to 25 minutes", () => {
+    expect(parseTimer("番茄钟")).toEqual({ name: "番茄钟", duration_seconds: 1500 });
+  });
+  it("falls back to a default name", () => {
+    expect(parseTimer("计时5分钟")).toEqual({ name: "计时", duration_seconds: 300 });
+  });
+  it("returns null without a usable duration", () => {
+    expect(parseTimer("买牛奶")).toBeNull();
   });
 });
