@@ -46,3 +46,46 @@ export function parseClockEn(input: string): { hour: number; minute: number } | 
   }
   return null;
 }
+
+/** 英文相对时间 "in N unit"(含 in a week / in half an hour)→ Date;否则 null。 */
+export function tryRelativeEn(input: string, now: Date): Date | null {
+  const s = input.toLowerCase();
+  if (/\bin\s+half\s+(?:an?\s+)?hour\b/.test(s)) {
+    return new Date(now.getTime() + 1800 * 1000);
+  }
+  const m = s.match(
+    /\bin\s+(\d+|an?)\s*(minutes?|mins?|hours?|hrs?|days?|weeks?|seconds?|secs?)\b/,
+  );
+  if (!m) return null;
+  const n = m[1] === "a" || m[1] === "an" ? 1 : parseInt(m[1], 10);
+  const unit = m[2];
+  const mult = /^h/.test(unit)
+    ? 3600
+    : /^m/.test(unit)
+      ? 60
+      : /^d/.test(unit)
+        ? 86400
+        : /^w/.test(unit)
+          ? 604800
+          : 1;
+  return new Date(now.getTime() + n * mult * 1000);
+}
+
+/** 英文具名日 today/tonight/tomorrow/the day after tomorrow → Date;无时刻默认 09:00。 */
+export function tryNamedDayEn(input: string, now: Date): Date | null {
+  const s = input.toLowerCase();
+  const days: Array<[RegExp, number]> = [
+    [/\bthe day after tomorrow\b/, 2],
+    [/\btomorrow\b/, 1],
+    [/\b(?:today|tonight)\b/, 0],
+  ];
+  for (const [pat, offset] of days) {
+    if (!pat.test(s)) continue;
+    const base = new Date(now);
+    base.setDate(base.getDate() + offset);
+    const clock = parseClockEn(input);
+    base.setHours(clock ? clock.hour : 9, clock ? clock.minute : 0, 0, 0);
+    return base;
+  }
+  return null;
+}

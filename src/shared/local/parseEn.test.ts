@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseDurationEn, parseClockEn } from "./parseEn";
+import { parseDurationEn, parseClockEn, tryRelativeEn, tryNamedDayEn } from "./parseEn";
 
 describe("parseDurationEn", () => {
   it("parses minutes and hours", () => {
@@ -40,5 +40,30 @@ describe("parseClockEn", () => {
   });
   it("ignores bare numbers with no clock signal", () => {
     expect(parseClockEn("buy 5 apples")).toBeNull();
+  });
+});
+
+const NOW = new Date(2026, 0, 1, 8, 0, 0); // Thu 2026-01-01 08:00
+
+describe("tryRelativeEn", () => {
+  it("parses 'in N unit'", () => {
+    expect(tryRelativeEn("in 30 minutes", NOW)!.getTime()).toBe(NOW.getTime() + 1800 * 1000);
+    expect(tryRelativeEn("in 2 hours", NOW)!.getTime()).toBe(NOW.getTime() + 7200 * 1000);
+    expect(tryRelativeEn("in a week", NOW)!.getTime()).toBe(NOW.getTime() + 604800 * 1000);
+    expect(tryRelativeEn("in half an hour", NOW)!.getTime()).toBe(NOW.getTime() + 1800 * 1000);
+  });
+  it("returns null otherwise", () => {
+    expect(tryRelativeEn("buy milk", NOW)).toBeNull();
+  });
+});
+
+describe("tryNamedDayEn", () => {
+  it("parses tomorrow with clock", () => {
+    const at = tryNamedDayEn("tomorrow at 8pm", NOW)!;
+    expect([at.getMonth(), at.getDate(), at.getHours()]).toEqual([0, 2, 20]);
+  });
+  it("defaults to 09:00 and handles day-after-tomorrow", () => {
+    expect([tryNamedDayEn("today", NOW)!.getDate(), tryNamedDayEn("today", NOW)!.getHours()]).toEqual([1, 9]);
+    expect(tryNamedDayEn("the day after tomorrow", NOW)!.getDate()).toBe(3);
   });
 });
