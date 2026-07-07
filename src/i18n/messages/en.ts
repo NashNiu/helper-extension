@@ -4,7 +4,7 @@ export const en = {
   "tab.todo": "Todo",
   "tab.reminder": "Reminders",
   "tab.timer": "Timer",
-  "nav.profile": "Profile",
+  "nav.profile": "Mine",
 
   "quickAdd.placeholder": "Add in one sentence…",
   "quickAdd.add": "Add",
@@ -74,7 +74,7 @@ export const en = {
   "widget.collapseAria": "Collapse timer",
   "widget.expandAria": "Expand timer",
 
-  "profile.title": "Profile",
+  "profile.title": "Mine",
   "profile.backAria": "Back",
   "profile.synced": "Synced",
   "profile.localMode": "Local mode",

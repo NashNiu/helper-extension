@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useT } from "../i18n/react";
 import { useAuth } from "./useAuth";
-import { LoginView } from "./LoginView";
 import { ProfileView } from "./ProfileView";
 import { TabBar, type TabKey } from "../components/TabBar";
 import { QuickAddBar } from "../features/QuickAddBar";
@@ -13,10 +12,9 @@ import { ClipboardView } from "../features/clipboard/ClipboardView";
 
 export default function App() {
   const t = useT();
-  const { user, status, signIn, signOut } = useAuth();
+  const { status } = useAuth();
   const [tab, setTab] = useState<TabKey>("todo");
   const [refreshKey, setRefreshKey] = useState(0);
-  const [showLogin, setShowLogin] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
 
   if (status === "loading") {
@@ -28,32 +26,15 @@ export default function App() {
   // 登录态切换后，列表数据源也随之切换（本地 ↔ 后端），需强制各视图重新加载。
   const bump = () => setRefreshKey((k) => k + 1);
 
-  const handleLogin = async (id: string, pw: string) => {
-    await signIn(id, pw);
-    setShowLogin(false);
-    bump();
-  };
-
-  const handleSignOut = async () => {
-    await signOut();
-    bump();
-  };
-
-  if (showLogin && !loggedIn) {
-    return <LoginView onLogin={handleLogin} onCancel={() => setShowLogin(false)} />;
-  }
-
   return (
     <div className="relative flex h-full flex-col overflow-x-clip bg-ground">
       <TabBar
         value={tab}
         onChange={setTab}
-        loggedIn={loggedIn}
-        userInitial={user?.username?.slice(0, 1) ?? ""}
         onOpenProfile={() => setShowProfile(true)}
       />
-      {/* “一句话智能添加”对登录/未登录都可用：登录走后端 AI，未登录走公开 AI 接口 + 写本地。
-          剪贴板 tab 不涉及 AI 添加，故隐藏。 */}
+      {/* “一句话智能添加”对登录/未登录都可用：未登录走本地规则解析并写入本地，登录走后端 AI。
+          剪贴板 tab 不涉及添加，故隐藏。 */}
       {tab !== "clipboard" && <QuickAddBar onAdded={bump} loggedIn={loggedIn} />}
       <main className="min-h-0 flex-1 overflow-y-auto">
         {tab === "reminder" && <ReminderView refreshKey={refreshKey} />}
@@ -65,15 +46,7 @@ export default function App() {
       {showWidget && <TimerWidget onOpen={() => setTab("timer")} />}
 
       {showProfile && (
-        <ProfileView
-          loggedIn={loggedIn}
-          userName={user?.username ?? ""}
-          userEmail={user?.email ?? ""}
-          onBack={() => setShowProfile(false)}
-          onSignIn={() => setShowLogin(true)}
-          onSignOut={handleSignOut}
-          onChanged={bump}
-        />
+        <ProfileView onBack={() => setShowProfile(false)} onChanged={bump} />
       )}
     </div>
   );

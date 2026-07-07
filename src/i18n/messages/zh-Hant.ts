@@ -6,7 +6,7 @@ export const zhHant: Record<keyof typeof en, string> = {
   "tab.todo": "待辦",
   "tab.reminder": "提醒",
   "tab.timer": "計時",
-  "nav.profile": "個人中心",
+  "nav.profile": "我的",
 
   "quickAdd.placeholder": "一句話新增…",
   "quickAdd.add": "新增",
@@ -76,7 +76,7 @@ export const zhHant: Record<keyof typeof en, string> = {
   "widget.collapseAria": "收合計時",
   "widget.expandAria": "展開計時",
 
-  "profile.title": "個人中心",
+  "profile.title": "我的",
   "profile.backAria": "返回",
   "profile.synced": "已同步",
   "profile.localMode": "本機模式",

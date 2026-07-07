@@ -6,7 +6,7 @@ export const zhHans: Record<keyof typeof en, string> = {
   "tab.todo": "待办",
   "tab.reminder": "提醒",
   "tab.timer": "计时",
-  "nav.profile": "个人中心",
+  "nav.profile": "我的",
 
   "quickAdd.placeholder": "一句话添加…",
   "quickAdd.add": "添加",
@@ -76,7 +76,7 @@ export const zhHans: Record<keyof typeof en, string> = {
   "widget.collapseAria": "收起计时",
   "widget.expandAria": "展开计时",
 
-  "profile.title": "个人中心",
+  "profile.title": "我的",
   "profile.backAria": "返回",
   "profile.synced": "已同步",
   "profile.localMode": "本地模式",

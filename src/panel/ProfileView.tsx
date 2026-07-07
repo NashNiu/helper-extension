@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { todoApi, type Todo } from "../shared/api/todo";
 import { reminderApi, type Reminder } from "../shared/api/reminder";
 import { formatDateTime } from "../shared/datetime";
-import { Button } from "../components/Button";
 import { Loading } from "../components/Loading";
 import { useInfiniteList } from "../shared/useInfiniteList";
 import { useT, useLocale } from "../i18n/react";
@@ -259,20 +258,10 @@ function LanguageSelect() {
 }
 
 export function ProfileView({
-  loggedIn,
-  userName,
-  userEmail,
   onBack,
-  onSignIn,
-  onSignOut,
   onChanged,
 }: {
-  loggedIn: boolean;
-  userName: string;
-  userEmail: string;
   onBack: () => void;
-  onSignIn: () => void;
-  onSignOut: () => void;
   onChanged: () => void;
 }) {
   const [seg, setSeg] = useState<Seg>("todos");
@@ -292,57 +281,8 @@ export function ProfileView({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3.5">
-        {/* 账户卡片 */}
-        {loggedIn ? (
-          <>
-            <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4">
-              <span className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full bg-accent text-lg font-bold text-white">
-                {userName.slice(0, 1) || "我"}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-ink">{userName}</p>
-                {userEmail && <p className="mt-0.5 break-all text-xs text-muted">{userEmail}</p>}
-                <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent-ink">
-                  <CheckIcon /> {t("profile.synced")}
-                </span>
-              </div>
-            </div>
-            <Button
-              variant="ghost"
-              onClick={onSignOut}
-              className="mt-3 w-full border border-line py-2.5"
-            >
-              {t("profile.signOut")}
-            </Button>
-          </>
-        ) : (
-          <>
-            <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4">
-              <span className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full bg-black/[0.06] text-muted">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-ink">{t("profile.localMode")}</p>
-                <p className="mt-0.5 text-xs text-muted">{t("profile.notSignedIn")}</p>
-                <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-[11px] font-semibold text-muted">
-                  {t("profile.dataLocalOnly")}
-                </span>
-              </div>
-            </div>
-            <Button onClick={onSignIn} className="mt-3 w-full py-2.5">
-              {t("profile.signInToSync")}
-            </Button>
-            <p className="mt-2.5 px-0.5 text-xs leading-relaxed text-muted">
-              {t("profile.localHint")}
-            </p>
-          </>
-        )}
-
         {/* 语言选择器 */}
-        <div className="mt-3 flex items-center justify-between rounded-2xl border border-line bg-surface px-4 py-3">
+        <div className="flex items-center justify-between rounded-2xl border border-line bg-surface px-4 py-3">
           <span className="text-sm text-ink">{t("profile.language")}</span>
           <LanguageSelect />
         </div>
