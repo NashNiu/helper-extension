@@ -21,7 +21,6 @@ export default function App() {
     return <div className="flex h-full items-center justify-center text-muted">{t("common.loading")}</div>;
   }
 
-  const loggedIn = status === "in";
   const showWidget = tab !== "timer" && !showProfile;
   // 登录态切换后，列表数据源也随之切换（本地 ↔ 后端），需强制各视图重新加载。
   const bump = () => setRefreshKey((k) => k + 1);
@@ -35,7 +34,7 @@ export default function App() {
       />
       {/* “一句话智能添加”对登录/未登录都可用：未登录走本地规则解析并写入本地，登录走后端 AI。
           剪贴板 tab 不涉及添加，故隐藏。 */}
-      {tab !== "clipboard" && <QuickAddBar onAdded={bump} loggedIn={loggedIn} />}
+      {tab !== "clipboard" && <QuickAddBar onAdded={bump} />}
       <main className="min-h-0 flex-1 overflow-y-auto">
         {tab === "reminder" && <ReminderView refreshKey={refreshKey} />}
         {tab === "timer" && <TimerView refreshKey={refreshKey} />}

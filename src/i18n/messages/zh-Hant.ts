@@ -15,6 +15,7 @@ export const zhHant: Record<keyof typeof en, string> = {
   "quickAdd.errNetwork": "網路不佳，請檢查連線後重試",
   "quickAdd.errRateLimited": "操作太頻繁，請稍後再試",
   "quickAdd.errGeneric": "新增失敗，請稍後再試",
+  "quickAdd.aiFallback": "AI 不可用，已用本機解析",
 
   "todo.empty": "暫無待辦",
   "todo.completeAria": "完成「{content}」",

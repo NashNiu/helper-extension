@@ -15,6 +15,7 @@ export const zhHans: Record<keyof typeof en, string> = {
   "quickAdd.errNetwork": "网络不给力，请检查连接后重试",
   "quickAdd.errRateLimited": "操作太频繁了，请稍后再试",
   "quickAdd.errGeneric": "没能添加成功，请稍后再试",
+  "quickAdd.aiFallback": "AI 不可用，已用本地解析",
 
   "todo.empty": "暂无待办",
   "todo.completeAria": "完成「{content}」",

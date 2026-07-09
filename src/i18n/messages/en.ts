@@ -13,6 +13,7 @@ export const en = {
   "quickAdd.errNetwork": "Network issue — check your connection and retry",
   "quickAdd.errRateLimited": "Too many requests — please try again later",
   "quickAdd.errGeneric": "Couldn't add — please try again later",
+  "quickAdd.aiFallback": "AI unavailable — parsed locally",
 
   "todo.empty": "No todos yet",
   "todo.completeAria": "Complete \"{content}\"",

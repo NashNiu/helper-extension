@@ -3,13 +3,11 @@ import { Button } from "../components/Button";
 import { Input } from "../components/Input";
 import { useT } from "../i18n/react";
 import type { MessageKey } from "../i18n/messages/en";
-import { classifyApi } from "../shared/api/classify";
-import { reminderApi } from "../shared/api/reminder";
-import { timerApi } from "../shared/api/timer";
-import { todoApi } from "../shared/api/todo";
 import { ApiError } from "../shared/http";
 import { makeLocalQuickAddDeps } from "../shared/local/localQuickAdd";
-import { routeQuickAdd, type QuickAddDeps } from "./quickAdd";
+import { makeByokQuickAddDeps } from "../shared/ai/byokQuickAdd";
+import { getKey, DEEPSEEK_KEY_STORAGE_KEY } from "../shared/ai/apiKey";
+import { routeQuickAdd, routeQuickAddWithFallback, type QuickAddDeps } from "./quickAdd";
 
 type HintKind = "ok" | "warn" | "error";
 
@@ -44,33 +42,36 @@ function CheckIcon() {
   );
 }
 
-export function QuickAddBar({
-  onAdded,
-  loggedIn,
-}: {
-  onAdded: () => void;
-  loggedIn: boolean;
-}) {
+export function QuickAddBar({ onAdded }: { onAdded: () => void }) {
   const t = useT();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [hint, setHint] = useState("");
   const [hintKind, setHintKind] = useState<HintKind>("ok");
+  const [key, setKeyState] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const submittedRef = useRef(false);
 
-  // 登录:后端 AI 解析并落库。未登录:本地规则解析,零后端 AI 调用。
-  const deps = useMemo<QuickAddDeps>(
-    () =>
-      loggedIn
-        ? {
-            classify: classifyApi.classify,
-            createReminder: reminderApi.create,
-            createTimer: timerApi.createFromText,
-            createTodo: todoApi.create,
-          }
-        : makeLocalQuickAddDeps(),
-    [loggedIn],
+  // 读取 DeepSeek Key,并在设置页保存/清除时(storage 变更)自动刷新。
+  useEffect(() => {
+    let alive = true;
+    void getKey().then((k) => { if (alive) setKeyState(k); });
+    const onChanged = (
+      changes: Record<string, chrome.storage.StorageChange>,
+      area: string,
+    ) => {
+      if (area === "local" && changes[DEEPSEEK_KEY_STORAGE_KEY]) {
+        setKeyState((changes[DEEPSEEK_KEY_STORAGE_KEY].newValue as string | undefined) ?? "");
+      }
+    };
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => { alive = false; chrome.storage.onChanged.removeListener(onChanged); };
+  }, []);
+
+  const localDeps = useMemo<QuickAddDeps>(() => makeLocalQuickAddDeps(), []);
+  const aiDeps = useMemo<QuickAddDeps | null>(
+    () => (key ? makeByokQuickAddDeps(key) : null),
+    [key],
   );
 
   async function submit() {
@@ -80,15 +81,22 @@ export function QuickAddBar({
     setBusy(true);
     setHint("");
     try {
-      const handled = await routeQuickAdd(input, deps);
+      const { handled, usedFallback } = aiDeps
+        ? await routeQuickAddWithFallback(input, aiDeps, localDeps)
+        : { handled: await routeQuickAdd(input, localDeps), usedFallback: false };
       if (handled.length === 0) {
         setHintKind("warn");
         setHint(t("quickAdd.unrecognized"));
       } else {
         setText("");
-        setHintKind("ok");
-        const items = handled.map((h) => t(("tab." + h) as MessageKey)).join(t("common.listSep"));
-        setHint(t("quickAdd.added", { items }));
+        if (usedFallback) {
+          setHintKind("warn");
+          setHint(t("quickAdd.aiFallback"));
+        } else {
+          setHintKind("ok");
+          const items = handled.map((h) => t(("tab." + h) as MessageKey)).join(t("common.listSep"));
+          setHint(t("quickAdd.added", { items }));
+        }
         onAdded();
       }
     } catch (e) {
@@ -105,7 +113,6 @@ export function QuickAddBar({
     }
   }
 
-  // 提示自动消失：成功/未识别 3s，错误留长一点 6s。
   useEffect(() => {
     if (!hint) return;
     const ms = hintKind === "error" ? 6000 : 3000;
@@ -113,7 +120,6 @@ export function QuickAddBar({
     return () => clearTimeout(id);
   }, [hint, hintKind]);
 
-  // 一次提交结束后（busy 落回 false），把焦点送回输入框，便于连续录入。
   useEffect(() => {
     if (!busy && submittedRef.current) {
       submittedRef.current = false;
