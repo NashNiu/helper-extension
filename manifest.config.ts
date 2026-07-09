@@ -26,5 +26,6 @@ export default defineManifest({
   permissions: ["sidePanel", "alarms", "notifications", "storage", "unlimitedStorage", "contextMenus", "clipboardWrite", "clipboardRead"],
   host_permissions: [
     "https://helper-backend-production-6abe.up.railway.app/*",
+    "https://api.deepseek.com/*",
   ],
 });
