@@ -32,7 +32,7 @@ export default function App() {
         onChange={setTab}
         onOpenProfile={() => setShowProfile(true)}
       />
-      {/* “一句话智能添加”对登录/未登录都可用：未登录走本地规则解析并写入本地，登录走后端 AI。
+      {/* “一句话智能添加”始终可用：配置了 DeepSeek Key 走 AI 解析（失败自动回退本地），未配置走本地规则解析。
           剪贴板 tab 不涉及添加，故隐藏。 */}
       {tab !== "clipboard" && <QuickAddBar onAdded={bump} />}
       <main className="min-h-0 flex-1 overflow-y-auto">
