@@ -3,10 +3,13 @@ import { todoApi, type Todo } from "../shared/api/todo";
 import { reminderApi, type Reminder } from "../shared/api/reminder";
 import { formatDateTime } from "../shared/datetime";
 import { Loading } from "../components/Loading";
+import { Button } from "../components/Button";
 import { useInfiniteList } from "../shared/useInfiniteList";
 import { useT, useLocale } from "../i18n/react";
 import type { LocalePref } from "../i18n/core";
 import type { MessageKey } from "../i18n/messages/en";
+import { getKey, setKey, clearKey } from "../shared/ai/apiKey";
+import { validateKey } from "../shared/ai/deepseek";
 
 type Seg = "todos" | "reminders";
 
@@ -257,6 +260,88 @@ function LanguageSelect() {
   );
 }
 
+type AiStatusMsg = "" | "valid" | "invalid" | "network";
+
+function AiKeyCard() {
+  const t = useT();
+  const [enabled, setEnabled] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<AiStatusMsg>("");
+
+  useEffect(() => {
+    void getKey().then((k) => setEnabled(k.length > 0));
+  }, []);
+
+  async function save() {
+    const key = draft.trim();
+    if (!key || saving) return;
+    setSaving(true);
+    setMsg("");
+    const status = await validateKey(key);
+    if (status === "valid") {
+      await setKey(key);
+      setEnabled(true);
+      setDraft("");
+      setMsg("valid");
+    } else if (status === "invalid") {
+      setMsg("invalid");
+    } else {
+      setMsg("network");
+    }
+    setSaving(false);
+  }
+
+  async function remove() {
+    await clearKey();
+    setEnabled(false);
+    setMsg("");
+  }
+
+  const msgClass = msg === "valid" ? "text-accent-ink" : "text-danger";
+  const msgText =
+    msg === "valid" ? t("profile.aiValid")
+    : msg === "invalid" ? t("profile.aiInvalid")
+    : msg === "network" ? t("profile.aiNetworkErr")
+    : "";
+
+  return (
+    <div className="mb-3 rounded-2xl border border-line bg-surface p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-sm font-semibold text-ink">{t("profile.aiSection")}</span>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+            enabled ? "bg-accent-soft text-accent-ink" : "bg-black/[0.05] text-muted"
+          }`}
+        >
+          {enabled ? t("profile.aiEnabled") : t("profile.aiNotSet")}
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="password"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") void save(); }}
+          placeholder={t("profile.aiKeyPlaceholder")}
+          aria-label={t("profile.aiSection")}
+          className="min-w-0 flex-1 rounded-lg border border-line bg-ground px-2.5 py-1.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        />
+        <Button onClick={() => void save()} disabled={saving || !draft.trim()} className="shrink-0 py-1.5">
+          {saving ? t("profile.aiSaving") : t("profile.aiSave")}
+        </Button>
+        {enabled && (
+          <Button variant="ghost" onClick={() => void remove()} className="shrink-0 border border-line py-1.5">
+            {t("profile.aiClear")}
+          </Button>
+        )}
+      </div>
+      {msgText && <p className={`mt-2 text-xs font-medium ${msgClass}`}>{msgText}</p>}
+      <p className="mt-2 text-xs leading-relaxed text-muted">{t("profile.aiHint")}</p>
+    </div>
+  );
+}
+
 export function ProfileView({
   onBack,
   onChanged,
@@ -281,6 +366,7 @@ export function ProfileView({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3.5">
+        <AiKeyCard />
         {/* 语言选择器 */}
         <div className="flex items-center justify-between rounded-2xl border border-line bg-surface px-4 py-3">
           <span className="text-sm text-ink">{t("profile.language")}</span>
