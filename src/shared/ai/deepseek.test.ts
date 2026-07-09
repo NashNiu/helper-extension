@@ -63,6 +63,14 @@ describe("analyzeWithDeepseek", () => {
     expect(items).toEqual([{ type: "reminder", message: "future", trigger_at: "2026-07-08T01:00:00.000Z" }]);
   });
 
+  it("drops a reminder whose message is blank", async () => {
+    const items = await analyzeWithDeepseek(
+      "x", NOW, "k",
+      fetchOk({ items: [{ type: "reminder", message: "   ", trigger_at: "2026-07-08T09:00:00+08:00" }] }),
+    );
+    expect(items).toEqual([]);
+  });
+
   it("returns [] for an empty items array (unrecognized, not an error)", async () => {
     const items = await analyzeWithDeepseek("hi", NOW, "k", fetchOk({ items: [] }));
     expect(items).toEqual([]);

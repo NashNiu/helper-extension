@@ -68,7 +68,7 @@ function coerceItems(raw: unknown, now: Date): AnalyzedItem[] {
     const o = it as Record<string, unknown>;
     if (o.type === "reminder") {
       if (seen.has("reminder")) continue;
-      if (typeof o.message !== "string" || typeof o.trigger_at !== "string") continue;
+      if (typeof o.message !== "string" || !o.message.trim() || typeof o.trigger_at !== "string") continue;
       const d = new Date(o.trigger_at);
       if (isNaN(d.getTime()) || d.getTime() <= now.getTime()) continue;
       seen.add("reminder");
