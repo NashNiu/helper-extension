@@ -6,7 +6,7 @@ export const zhHant: Record<keyof typeof en, string> = {
   "tab.todo": "待辦",
   "tab.reminder": "提醒",
   "tab.timer": "計時",
-  "nav.profile": "個人中心",
+  "nav.profile": "我的",
 
   "quickAdd.placeholder": "一句話新增…",
   "quickAdd.add": "新增",
@@ -15,6 +15,7 @@ export const zhHant: Record<keyof typeof en, string> = {
   "quickAdd.errNetwork": "網路不佳，請檢查連線後重試",
   "quickAdd.errRateLimited": "操作太頻繁，請稍後再試",
   "quickAdd.errGeneric": "新增失敗，請稍後再試",
+  "quickAdd.aiFallback": "AI 不可用，已用本機解析",
 
   "todo.empty": "暫無待辦",
   "todo.completeAria": "完成「{content}」",
@@ -76,7 +77,7 @@ export const zhHant: Record<keyof typeof en, string> = {
   "widget.collapseAria": "收合計時",
   "widget.expandAria": "展開計時",
 
-  "profile.title": "個人中心",
+  "profile.title": "我的",
   "profile.backAria": "返回",
   "profile.synced": "已同步",
   "profile.localMode": "本機模式",
@@ -94,6 +95,17 @@ export const zhHant: Record<keyof typeof en, string> = {
   "profile.deleteAria": "刪除「{content}」",
   "profile.language": "語言",
   "profile.langSystem": "系統預設",
+  "profile.aiSection": "AI 智能解析 (DeepSeek)",
+  "profile.aiEnabled": "已啟用",
+  "profile.aiNotSet": "未設定",
+  "profile.aiKeyPlaceholder": "貼上你的 DeepSeek API Key",
+  "profile.aiSave": "儲存",
+  "profile.aiSaving": "驗證中…",
+  "profile.aiClear": "清除",
+  "profile.aiValid": "✓ 已啟用",
+  "profile.aiInvalid": "✗ Key 無效",
+  "profile.aiNetworkErr": "✗ 網路錯誤，請重試",
+  "profile.aiHint": "Key 僅存本機，請求直連 DeepSeek，不經過我方伺服器。可在 platform.deepseek.com 取得 Key。",
 
   "login.title": "登入 Helper",
   "login.subtitle": "登入後資料可在多裝置間同步；不登入也能在本機使用。",

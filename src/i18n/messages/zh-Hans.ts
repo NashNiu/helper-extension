@@ -6,7 +6,7 @@ export const zhHans: Record<keyof typeof en, string> = {
   "tab.todo": "待办",
   "tab.reminder": "提醒",
   "tab.timer": "计时",
-  "nav.profile": "个人中心",
+  "nav.profile": "我的",
 
   "quickAdd.placeholder": "一句话添加…",
   "quickAdd.add": "添加",
@@ -15,6 +15,7 @@ export const zhHans: Record<keyof typeof en, string> = {
   "quickAdd.errNetwork": "网络不给力，请检查连接后重试",
   "quickAdd.errRateLimited": "操作太频繁了，请稍后再试",
   "quickAdd.errGeneric": "没能添加成功，请稍后再试",
+  "quickAdd.aiFallback": "AI 不可用，已用本地解析",
 
   "todo.empty": "暂无待办",
   "todo.completeAria": "完成「{content}」",
@@ -76,7 +77,7 @@ export const zhHans: Record<keyof typeof en, string> = {
   "widget.collapseAria": "收起计时",
   "widget.expandAria": "展开计时",
 
-  "profile.title": "个人中心",
+  "profile.title": "我的",
   "profile.backAria": "返回",
   "profile.synced": "已同步",
   "profile.localMode": "本地模式",
@@ -94,6 +95,17 @@ export const zhHans: Record<keyof typeof en, string> = {
   "profile.deleteAria": "删除「{content}」",
   "profile.language": "语言",
   "profile.langSystem": "系统默认",
+  "profile.aiSection": "AI 智能解析 (DeepSeek)",
+  "profile.aiEnabled": "已启用",
+  "profile.aiNotSet": "未设置",
+  "profile.aiKeyPlaceholder": "粘贴你的 DeepSeek API Key",
+  "profile.aiSave": "保存",
+  "profile.aiSaving": "校验中…",
+  "profile.aiClear": "清除",
+  "profile.aiValid": "✓ 已启用",
+  "profile.aiInvalid": "✗ Key 无效",
+  "profile.aiNetworkErr": "✗ 网络错误，请重试",
+  "profile.aiHint": "Key 仅存本地，请求直连 DeepSeek，不经过我方服务器。可在 platform.deepseek.com 获取 Key。",
 
   "login.title": "登录 Helper",
   "login.subtitle": "登录后数据可在多设备间同步；不登录也能在本机使用。",

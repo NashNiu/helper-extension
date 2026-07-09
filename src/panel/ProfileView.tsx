@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { todoApi, type Todo } from "../shared/api/todo";
 import { reminderApi, type Reminder } from "../shared/api/reminder";
 import { formatDateTime } from "../shared/datetime";
-import { Button } from "../components/Button";
 import { Loading } from "../components/Loading";
+import { Button } from "../components/Button";
 import { useInfiniteList } from "../shared/useInfiniteList";
 import { useT, useLocale } from "../i18n/react";
 import type { LocalePref } from "../i18n/core";
 import type { MessageKey } from "../i18n/messages/en";
+import { getKey, setKey, clearKey } from "../shared/ai/apiKey";
+import { validateKey } from "../shared/ai/deepseek";
 
 type Seg = "todos" | "reminders";
 
@@ -258,21 +260,93 @@ function LanguageSelect() {
   );
 }
 
+type AiStatusMsg = "" | "valid" | "invalid" | "network";
+
+function AiKeyCard() {
+  const t = useT();
+  const [enabled, setEnabled] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<AiStatusMsg>("");
+
+  useEffect(() => {
+    void getKey().then((k) => setEnabled(k.length > 0));
+  }, []);
+
+  async function save() {
+    const key = draft.trim();
+    if (!key || saving) return;
+    setSaving(true);
+    setMsg("");
+    const status = await validateKey(key);
+    if (status === "valid") {
+      await setKey(key);
+      setEnabled(true);
+      setDraft("");
+      setMsg("valid");
+    } else if (status === "invalid") {
+      setMsg("invalid");
+    } else {
+      setMsg("network");
+    }
+    setSaving(false);
+  }
+
+  async function remove() {
+    await clearKey();
+    setEnabled(false);
+    setMsg("");
+  }
+
+  const msgClass = msg === "valid" ? "text-accent-ink" : "text-danger";
+  const msgText =
+    msg === "valid" ? t("profile.aiValid")
+    : msg === "invalid" ? t("profile.aiInvalid")
+    : msg === "network" ? t("profile.aiNetworkErr")
+    : "";
+
+  return (
+    <div className="mb-3 rounded-2xl border border-line bg-surface p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-sm font-semibold text-ink">{t("profile.aiSection")}</span>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+            enabled ? "bg-accent-soft text-accent-ink" : "bg-black/[0.05] text-muted"
+          }`}
+        >
+          {enabled ? t("profile.aiEnabled") : t("profile.aiNotSet")}
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="password"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") void save(); }}
+          placeholder={t("profile.aiKeyPlaceholder")}
+          aria-label={t("profile.aiSection")}
+          className="min-w-0 flex-1 rounded-lg border border-line bg-ground px-2.5 py-1.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        />
+        <Button onClick={() => void save()} disabled={saving || !draft.trim()} className="shrink-0 py-1.5">
+          {saving ? t("profile.aiSaving") : t("profile.aiSave")}
+        </Button>
+        {enabled && (
+          <Button variant="ghost" onClick={() => void remove()} className="shrink-0 border border-line py-1.5">
+            {t("profile.aiClear")}
+          </Button>
+        )}
+      </div>
+      {msgText && <p className={`mt-2 text-xs font-medium ${msgClass}`}>{msgText}</p>}
+      <p className="mt-2 text-xs leading-relaxed text-muted">{t("profile.aiHint")}</p>
+    </div>
+  );
+}
+
 export function ProfileView({
-  loggedIn,
-  userName,
-  userEmail,
   onBack,
-  onSignIn,
-  onSignOut,
   onChanged,
 }: {
-  loggedIn: boolean;
-  userName: string;
-  userEmail: string;
   onBack: () => void;
-  onSignIn: () => void;
-  onSignOut: () => void;
   onChanged: () => void;
 }) {
   const [seg, setSeg] = useState<Seg>("todos");
@@ -292,57 +366,9 @@ export function ProfileView({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3.5">
-        {/* 账户卡片 */}
-        {loggedIn ? (
-          <>
-            <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4">
-              <span className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full bg-accent text-lg font-bold text-white">
-                {userName.slice(0, 1) || "我"}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-ink">{userName}</p>
-                {userEmail && <p className="mt-0.5 break-all text-xs text-muted">{userEmail}</p>}
-                <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent-ink">
-                  <CheckIcon /> {t("profile.synced")}
-                </span>
-              </div>
-            </div>
-            <Button
-              variant="ghost"
-              onClick={onSignOut}
-              className="mt-3 w-full border border-line py-2.5"
-            >
-              {t("profile.signOut")}
-            </Button>
-          </>
-        ) : (
-          <>
-            <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4">
-              <span className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full bg-black/[0.06] text-muted">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-ink">{t("profile.localMode")}</p>
-                <p className="mt-0.5 text-xs text-muted">{t("profile.notSignedIn")}</p>
-                <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-[11px] font-semibold text-muted">
-                  {t("profile.dataLocalOnly")}
-                </span>
-              </div>
-            </div>
-            <Button onClick={onSignIn} className="mt-3 w-full py-2.5">
-              {t("profile.signInToSync")}
-            </Button>
-            <p className="mt-2.5 px-0.5 text-xs leading-relaxed text-muted">
-              {t("profile.localHint")}
-            </p>
-          </>
-        )}
-
+        <AiKeyCard />
         {/* 语言选择器 */}
-        <div className="mt-3 flex items-center justify-between rounded-2xl border border-line bg-surface px-4 py-3">
+        <div className="flex items-center justify-between rounded-2xl border border-line bg-surface px-4 py-3">
           <span className="text-sm text-ink">{t("profile.language")}</span>
           <LanguageSelect />
         </div>

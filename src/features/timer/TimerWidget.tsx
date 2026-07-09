@@ -68,8 +68,8 @@ const smOutline = "border border-line px-2 py-1 text-xs";
 export function TimerWidget({ onOpen }: { onOpen: () => void }) {
   const t = useT();
   const { timer, remaining, refresh } = useCountdown();
-  // 默认收起为右边缘小胶囊，尽量不遮挡列表；点开才展开完整控制。
-  const [collapsed, setCollapsed] = useState(true);
+  // 默认展开完整控制。
+  const [collapsed, setCollapsed] = useState(false);
   if (!timer) return null;
 
   const session = timer.session;

@@ -4,7 +4,7 @@ export const en = {
   "tab.todo": "Todo",
   "tab.reminder": "Reminders",
   "tab.timer": "Timer",
-  "nav.profile": "Profile",
+  "nav.profile": "Mine",
 
   "quickAdd.placeholder": "Add in one sentence…",
   "quickAdd.add": "Add",
@@ -13,6 +13,7 @@ export const en = {
   "quickAdd.errNetwork": "Network issue — check your connection and retry",
   "quickAdd.errRateLimited": "Too many requests — please try again later",
   "quickAdd.errGeneric": "Couldn't add — please try again later",
+  "quickAdd.aiFallback": "AI unavailable — parsed locally",
 
   "todo.empty": "No todos yet",
   "todo.completeAria": "Complete \"{content}\"",
@@ -74,7 +75,7 @@ export const en = {
   "widget.collapseAria": "Collapse timer",
   "widget.expandAria": "Expand timer",
 
-  "profile.title": "Profile",
+  "profile.title": "Mine",
   "profile.backAria": "Back",
   "profile.synced": "Synced",
   "profile.localMode": "Local mode",
@@ -92,6 +93,17 @@ export const en = {
   "profile.deleteAria": "Delete \"{content}\"",
   "profile.language": "Language",
   "profile.langSystem": "System default",
+  "profile.aiSection": "AI parsing (DeepSeek)",
+  "profile.aiEnabled": "Enabled",
+  "profile.aiNotSet": "Not set",
+  "profile.aiKeyPlaceholder": "Paste your DeepSeek API key",
+  "profile.aiSave": "Save",
+  "profile.aiSaving": "Checking…",
+  "profile.aiClear": "Clear",
+  "profile.aiValid": "✓ Enabled",
+  "profile.aiInvalid": "✗ Invalid key",
+  "profile.aiNetworkErr": "✗ Network error, try again",
+  "profile.aiHint": "Your key is stored locally and requests go directly to DeepSeek, never through our server. Get a key at platform.deepseek.com.",
 
   "login.title": "Sign in to Helper",
   "login.subtitle": "Sign in to sync across devices; you can also use the app locally without signing in.",

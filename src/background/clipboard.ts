@@ -1,13 +1,7 @@
 import { translate } from "../i18n/core";
 import { currentLocale } from "../shared/locale";
 import { addItem, MAX_IMAGE_BYTES } from "../shared/clipboardStore";
-import {
-  CAPTURE_TEXT,
-  hostnameOf,
-  makeImageItem,
-  makeTextItem,
-  type CaptureTextMsg,
-} from "../shared/clipboardMessage";
+import { hostnameOf, makeImageItem } from "../shared/clipboardMessage";
 
 const MENU_ID = "helper-clip-image";
 const ICON = "icon-128.png";
@@ -63,12 +57,6 @@ async function saveImage(srcUrl: string, source: string): Promise<void> {
 chrome.contextMenus.onClicked.addListener((info) => {
   if (info.menuItemId === MENU_ID && info.srcUrl) {
     void saveImage(info.srcUrl, hostnameOf(info.pageUrl ?? ""));
-  }
-});
-
-chrome.runtime.onMessage.addListener((msg: CaptureTextMsg) => {
-  if (msg && msg.kind === CAPTURE_TEXT) {
-    void addItem(makeTextItem({ text: msg.text, source: msg.source, id: crypto.randomUUID(), createdAt: Date.now() }));
   }
 });
 
