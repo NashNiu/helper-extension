@@ -2,7 +2,7 @@
 
 [中文](README.md)
 
-A Chrome Side Panel extension: capture reminders, timers, and todos in one sentence. **Local-first, private, works offline** — all data stays in your browser.
+A Chrome Side Panel extension: capture reminders, timers, todos, and clipboard snippets in one sentence. **Local-first, private, works offline** — all data stays in your browser, no account required. Optionally paste your own DeepSeek API key for AI-powered parsing.
 
 ## Tech Stack
 
@@ -21,8 +21,18 @@ A Chrome Side Panel extension: capture reminders, timers, and todos in one sente
 | Todo | Task list with pagination + infinite scroll |
 | Reminders | System notification on due; fired by background alarms |
 | Timer | Classic pomodoro cycles (work/break, long break every 4th), pause/resume/reset, estimated end, floating widget |
-| Quick add | Natural-language input in the top bar, **local rule-based parsing** auto-routes to reminder / timer / todo (offline, zero backend) |
-| Profile | Open via the top-right avatar to view completed todos & past reminders; sign in / out |
+| Clipboard | Save text/images, pin & search; right-click "save image", one-click "add from clipboard" in the panel |
+| Quick add | Natural-language input in the top bar. Default **local rule-based parsing** (Chinese + English, offline, zero backend) auto-routes to reminder / timer / todo; with your own **DeepSeek key** it switches to AI parsing (auto-falls back to local on failure) |
+| Mine | Open via the top-right gear to switch UI language, set your DeepSeek key, and view completed todos & past reminders (no login in this version) |
+
+## Parsing tiers
+
+| Tier | Trigger | How it parses | Cost |
+|------|---------|---------------|------|
+| Free | No key set | Local rule-based parsing (common Chinese/English time, duration, weekday, date expressions) | Zero (fully local) |
+| BYOK | Set your own DeepSeek key in "Mine" | A single DeepSeek call, multi-intent; request goes straight to `api.deepseek.com`, never through our server | Paid by you |
+
+> The key is stored only in `chrome.storage.local` and is never sent anywhere except DeepSeek. On AI failure (invalid key / network / rate limit) it silently falls back to local parsing with a note.
 
 ## Getting Started
 
@@ -57,20 +67,21 @@ npm run build
 
 ```
 src/
-  background/     # Service worker: chrome.alarms heartbeat/reminder/timer alarms, notifications, pure logic (unit-tested)
-  panel/          # Side panel entry App, profile, login
-  features/       # Feature views: todo / reminder / timer (incl. TimerWidget), quick add
+  background/     # Service worker: chrome.alarms heartbeat/reminder/timer alarms, notifications, clipboard, pure logic (unit-tested)
+  panel/          # Side panel entry App, "Mine" settings page
+  features/       # Feature views: todo / reminder / timer (incl. TimerWidget) / clipboard, quick add
   components/     # Shared components (Button, TabBar, etc.)
-  shared/         # Data layer, HTTP, auth, local storage, timer control
+  shared/         # Data layer, HTTP, local storage, timer control
     api/          # Login-aware data APIs (remote ↔ local)
-    local/        # chrome.storage.local implementations
+    local/        # chrome.storage.local implementations + local rule-based parser (Chinese/English)
+    ai/           # BYOK: DeepSeek client, key storage, AI quick-add adapter
 ```
 
-### Local-first + optional login
+### Local-first (no login in v1)
 
-Each `shared/api/*` module branches internally on `hasToken()`: **logged in** hits the backend REST API, **logged out** reads/writes `chrome.storage.local`. Call sites are unaware; views reload via `refreshKey` when the auth state changes.
+All data lives in `chrome.storage.local`; the extension is fully usable without registration or sign-in. Each `shared/api/*` module still branches internally on `hasToken()` (**with a token** → backend REST, **without** → local read/write); this version exposes no login entry point, so it always runs local. Account-based cloud sync is a planned Pro capability.
 
-Quick-add parsing is performed by the extension's embedded **local rule-based parser** (`src/shared/local/parse.ts`), supporting common time and duration expressions in Chinese with zero backend calls. Advanced AI parsing for complex or colloquial phrasing is planned for the Pro tier.
+Quick-add parsing is done by the extension's embedded **local rule-based parser** (`src/shared/local/parse.ts` + `parseEn.ts`), supporting common Chinese/English time, duration, weekday, and date expressions with zero network calls. With your own DeepSeek key set, `src/shared/ai/` performs one DeepSeek call for smarter parsing (handling more colloquial, multi-intent phrasing), falling back to local on failure. Both tiers persist through the same local writers, so downstream logic is identical.
 
 ### Background scheduling
 
@@ -80,14 +91,17 @@ Quick-add parsing is performed by the extension's embedded **local rule-based pa
 
 ### Permissions & cross-origin
 
-`host_permissions` cover local (`localhost:3001`) and the production backend; extension pages `fetch` cross-origin directly via host permission, so no server-side CORS is needed.
+Extension pages `fetch` cross-origin directly via `host_permissions`, so no server-side CORS is needed.
 
 | Permission | Purpose |
 |------------|---------|
 | `sidePanel` | Side panel UI |
 | `alarms` | Reminder / timer scheduling |
 | `notifications` | System notifications |
-| `storage` | Local data & auth token |
+| `storage` / `unlimitedStorage` | Local data (incl. clipboard images) |
+| `contextMenus` | Right-click "save image" to clipboard |
+| `clipboardRead` / `clipboardWrite` | "Add from clipboard" / "copy" inside the panel |
+| `host_permissions` | Backend domain (sync when signed in; not exposed in the current UI); `api.deepseek.com` (AI parsing once a key is set) |
 
 ## Related
 
