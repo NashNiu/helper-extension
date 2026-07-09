@@ -52,6 +52,17 @@ describe("analyzeWithDeepseek", () => {
     expect(items).toEqual([]);
   });
 
+  it("keeps a valid item after an invalid earlier item of the same type", async () => {
+    const items = await analyzeWithDeepseek(
+      "x", NOW, "k",
+      fetchOk({ items: [
+        { type: "reminder", message: "past", trigger_at: "2020-01-01T00:00:00+08:00" },
+        { type: "reminder", message: "future", trigger_at: "2026-07-08T09:00:00+08:00" },
+      ] }),
+    );
+    expect(items).toEqual([{ type: "reminder", message: "future", trigger_at: "2026-07-08T01:00:00.000Z" }]);
+  });
+
   it("returns [] for an empty items array (unrecognized, not an error)", async () => {
     const items = await analyzeWithDeepseek("hi", NOW, "k", fetchOk({ items: [] }));
     expect(items).toEqual([]);
