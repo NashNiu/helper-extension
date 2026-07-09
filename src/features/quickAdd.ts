@@ -1,4 +1,5 @@
 import type { AssistantType } from "../shared/api/classify";
+import { AiError } from "../shared/ai/deepseek";
 
 export interface QuickAddDeps {
   classify: (input: string) => Promise<{ types: AssistantType[] }>;
@@ -27,4 +28,21 @@ export async function routeQuickAdd(
     // finance 忽略
   }
   return handled;
+}
+
+export async function routeQuickAddWithFallback(
+  input: string,
+  aiDeps: QuickAddDeps,
+  localDeps: QuickAddDeps,
+): Promise<{ handled: AssistantType[]; usedFallback: boolean }> {
+  try {
+    const handled = await routeQuickAdd(input, aiDeps);
+    return { handled, usedFallback: false };
+  } catch (e) {
+    if (e instanceof AiError) {
+      const handled = await routeQuickAdd(input, localDeps);
+      return { handled, usedFallback: true };
+    }
+    throw e;
+  }
 }

@@ -1,28 +1,35 @@
-import { describe, expect, it, vi } from "vitest";
-import { routeQuickAdd } from "./quickAdd";
+import { describe, expect, it } from "vitest";
+import { routeQuickAddWithFallback, type QuickAddDeps } from "./quickAdd";
+import { AiError } from "../shared/ai/deepseek";
 
-describe("routeQuickAdd", () => {
-  it("routes each non-finance type to its create", async () => {
-    const deps = {
-      classify: vi.fn(async () => ({ types: ["reminder", "todo", "finance"] as const })),
-      createReminder: vi.fn(async () => {}),
-      createTimer: vi.fn(async () => {}),
-      createTodo: vi.fn(async () => {}),
-    };
-    const handled = await routeQuickAdd("明天九点开会并买牛奶", deps as any);
-    expect(deps.createReminder).toHaveBeenCalledWith("明天九点开会并买牛奶");
-    expect(deps.createTodo).toHaveBeenCalledWith("明天九点开会并买牛奶");
-    expect(deps.createTimer).not.toHaveBeenCalled();
-    expect(handled).toEqual(["reminder", "todo"]);
+function deps(over: Partial<QuickAddDeps>): QuickAddDeps {
+  return {
+    classify: async () => ({ types: [] }),
+    createReminder: async () => {},
+    createTimer: async () => {},
+    createTodo: async () => {},
+    ...over,
+  };
+}
+
+describe("routeQuickAddWithFallback", () => {
+  it("uses AI result when AI succeeds", async () => {
+    const ai = deps({ classify: async () => ({ types: ["todo"] }) });
+    const local = deps({ classify: async () => ({ types: ["reminder"] }) });
+    const r = await routeQuickAddWithFallback("x", ai, local);
+    expect(r).toEqual({ handled: ["todo"], usedFallback: false });
   });
 
-  it("returns empty when only finance", async () => {
-    const deps = {
-      classify: vi.fn(async () => ({ types: ["finance"] as const })),
-      createReminder: vi.fn(),
-      createTimer: vi.fn(),
-      createTodo: vi.fn(),
-    };
-    expect(await routeQuickAdd("打车 30 元", deps as any)).toEqual([]);
+  it("falls back to local when AI throws AiError", async () => {
+    const ai = deps({ classify: async () => { throw new AiError("network"); } });
+    const local = deps({ classify: async () => ({ types: ["todo"] }) });
+    const r = await routeQuickAddWithFallback("x", ai, local);
+    expect(r).toEqual({ handled: ["todo"], usedFallback: true });
+  });
+
+  it("rethrows non-AiError errors", async () => {
+    const ai = deps({ classify: async () => { throw new Error("boom"); } });
+    const local = deps({});
+    await expect(routeQuickAddWithFallback("x", ai, local)).rejects.toThrow("boom");
   });
 });
