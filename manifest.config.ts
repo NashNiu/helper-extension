@@ -2,8 +2,8 @@ import { defineManifest } from "@crxjs/vite-plugin";
 
 export default defineManifest({
   manifest_version: 3,
-  name: "Helper 助手",
-  description: "一句话搞定提醒、计时与待办",
+  name: "记得",
+  description: "一句话搞定提醒、计时、待办与剪贴板",
   version: "0.1.0",
   minimum_chrome_version: "114",
   icons: {
@@ -13,7 +13,7 @@ export default defineManifest({
     "128": "icon-128.png",
   },
   action: {
-    default_title: "打开 Helper 侧边栏",
+    default_title: "打开「记得」侧边栏",
     default_icon: {
       "16": "icon-16.png",
       "32": "icon-32.png",

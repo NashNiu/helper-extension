@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>记得 · 宣传图生成器 (440×280)</title>
+<style>
+  body { margin:0; background:#eef1f2; font-family:"Microsoft YaHei","PingFang SC",sans-serif; color:#222; display:flex; flex-direction:column; align-items:center; gap:16px; padding:28px; }
+  h1 { font-size:16px; font-weight:600; margin:0; }
+  .frame { box-shadow:0 10px 32px rgba(0,0,0,.20); border-radius:10px; overflow:hidden; }
+  canvas { display:block; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:center; }
+  button { font:inherit; font-size:14px; padding:9px 18px; border:0; border-radius:8px; background:#2E8577; color:#fff; cursor:pointer; }
+  button.sec { background:#e2e6e7; color:#333; }
+  label { font-size:13px; color:#555; white-space:nowrap; }
+  input { font:inherit; font-size:13px; padding:6px 9px; border:1px solid #ccc; border-radius:6px; width:320px; }
+  .fields { display:flex; flex-direction:column; gap:8px; background:#fff; padding:16px 18px; border-radius:10px; }
+  .fld { display:flex; gap:12px; align-items:center; justify-content:space-between; }
+  .hint { font-size:12px; color:#888; max-width:470px; text-align:center; line-height:1.7; }
+</style>
+</head>
+<body>
+  <h1>「记得」Chrome 商店小宣传图 · 440 × 280</h1>
+  <div class="frame"><canvas id="c" width="440" height="280"></canvas></div>
+  <div class="row">
+    <button id="dl">下载 PNG（440×280）</button>
+    <button id="dl2" class="sec">下载 2× 高清（880×560）</button>
+  </div>
+  <div class="fields">
+    <div class="fld"><label>标题</label><input id="title" value="记得" /></div>
+    <div class="fld"><label>标语</label><input id="tag" value="一句话，记住每一件事" /></div>
+    <div class="fld"><label>示例输入</label><input id="demo" value="明天下午3点 开会" /></div>
+    <div class="fld"><label>结果说明</label><input id="result" value="已设提醒 · 明天 15:00 到点通知" /></div>
+    <div class="fld"><label>功能行</label><input id="feat" value="提醒 · 计时 · 待办 · 剪贴板" /></div>
+  </div>
+  <p class="hint">改文字实时预览。商店要求正好 440×280，用第一个按钮下载即可上传；2× 版仅供别处使用（上传前需缩回 440×280）。</p>
+
+<script>
+const c = document.getElementById("c");
+const TEAL_A = "#2F8878", TEAL_B = "#164E44";
+const ACCENT = "#2F8878";
+
+function rr(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// 白底青色秒表徽标（呼应扩展图标）
+function drawBadge(ctx, cx, cy, s) {
+  const x = cx - s / 2, y = cy - s / 2;
+  ctx.fillStyle = "#fff";
+  rr(ctx, x, y, s, s, s * 0.28);
+  ctx.fill();
+  ctx.strokeStyle = ACCENT;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const R = s * 0.30, dialY = cy + s * 0.06;
+  ctx.lineWidth = s * 0.09;
+  ctx.beginPath();
+  ctx.moveTo(cx - s * 0.13, y + s * 0.15);
+  ctx.lineTo(cx + s * 0.13, y + s * 0.15);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx, y + s * 0.15);
+  ctx.lineTo(cx, dialY - R);
+  ctx.stroke();
+  ctx.lineWidth = s * 0.085;
+  ctx.beginPath();
+  ctx.arc(cx, dialY, R, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = s * 0.075;
+  ctx.beginPath();
+  ctx.moveTo(cx, dialY);
+  ctx.lineTo(cx, dialY - R * 0.6);
+  ctx.moveTo(cx, dialY);
+  ctx.lineTo(cx + R * 0.52, dialY + R * 0.1);
+  ctx.stroke();
+}
+
+function clockIcon(ctx, cx, cy, r, color, lw) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lw;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx, cy - r * 0.55);
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + r * 0.5, cy + r * 0.15);
+  ctx.stroke();
+}
+
+function draw(ctx, scale) {
+  const W = 440, H = 280;
+  ctx.save();
+  ctx.scale(scale, scale);
+
+  // 背景对角渐变
+  const g = ctx.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, TEAL_A);
+  g.addColorStop(1, TEAL_B);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // 右上柔光
+  const glow = ctx.createRadialGradient(380, 40, 10, 380, 40, 240);
+  glow.addColorStop(0, "rgba(255,255,255,0.12)");
+  glow.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, H);
+
+  // 右下淡装饰环
+  ctx.strokeStyle = "rgba(255,255,255,0.06)";
+  ctx.lineWidth = 26;
+  ctx.beginPath();
+  ctx.arc(430, 300, 150, 0, Math.PI * 2);
+  ctx.stroke();
+
+  const PAD = 36;
+
+  // 品牌锁定区：徽标 + 记得
+  drawBadge(ctx, PAD + 23, 63, 50);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = '700 40px "Microsoft YaHei","PingFang SC",sans-serif';
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText(document.getElementById("title").value, PAD + 60, 77);
+
+  // 标语
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.font = '400 21px "Microsoft YaHei","PingFang SC",sans-serif';
+  ctx.fillText(document.getElementById("tag").value, PAD, 120);
+
+  // 悬浮输入条（主视觉）
+  const bx = PAD, by = 140, bw = W - PAD * 2, bh = 50;
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.22)";
+  ctx.shadowBlur = 18;
+  ctx.shadowOffsetY = 7;
+  ctx.fillStyle = "#ffffff";
+  rr(ctx, bx, by, bw, bh, bh / 2);
+  ctx.fill();
+  ctx.restore();
+
+  // 输入条里的时钟图标
+  clockIcon(ctx, bx + 28, by + bh / 2, 11, ACCENT, 2.4);
+  // 示例文字
+  ctx.fillStyle = "#2a2a2a";
+  ctx.font = '500 18px "Microsoft YaHei","PingFang SC",sans-serif';
+  ctx.textBaseline = "middle";
+  ctx.fillText(document.getElementById("demo").value, bx + 50, by + bh / 2 + 1);
+  // 右侧青色发送圆钮
+  const sc = bx + bw - bh / 2 - 6, scy = by + bh / 2, sr = bh / 2 - 7;
+  ctx.fillStyle = ACCENT;
+  ctx.beginPath();
+  ctx.arc(sc, scy, sr, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 2.4;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(sc - 6, scy);
+  ctx.lineTo(sc + 5, scy);
+  ctx.moveTo(sc + 1, scy - 5);
+  ctx.lineTo(sc + 6, scy);
+  ctx.lineTo(sc + 1, scy + 5);
+  ctx.stroke();
+  ctx.textBaseline = "alphabetic";
+
+  // 结果说明（带对勾）
+  const ry = 214;
+  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(PAD + 1, ry - 4);
+  ctx.lineTo(PAD + 5, ry);
+  ctx.lineTo(PAD + 12, ry - 9);
+  ctx.stroke();
+  ctx.fillStyle = "rgba(255,255,255,0.9)";
+  ctx.font = '400 15px "Microsoft YaHei","PingFang SC",sans-serif';
+  ctx.fillText(document.getElementById("result").value, PAD + 22, ry + 1);
+
+  // 功能行胶囊
+  const feat = document.getElementById("feat").value;
+  ctx.font = '600 15px "Microsoft YaHei","PingFang SC",sans-serif';
+  const fw = ctx.measureText(feat).width;
+  ctx.fillStyle = "rgba(255,255,255,0.15)";
+  rr(ctx, PAD, 244, fw + 26, 28, 14);
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.textBaseline = "middle";
+  ctx.fillText(feat, PAD + 13, 244 + 15);
+  ctx.textBaseline = "alphabetic";
+
+  ctx.restore();
+}
+
+function render() {
+  const ctx = c.getContext("2d");
+  ctx.clearRect(0, 0, c.width, c.height);
+  draw(ctx, c.width / 440);
+}
+
+function download(scale, name) {
+  const off = document.createElement("canvas");
+  off.width = 440 * scale;
+  off.height = 280 * scale;
+  draw(off.getContext("2d"), scale);
+  off.toBlob((b) => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(b);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }, "image/png");
+}
+
+document.querySelectorAll("input").forEach((i) => i.addEventListener("input", render));
+document.getElementById("dl").addEventListener("click", () => download(1, "记得-promo-440x280.png"));
+document.getElementById("dl2").addEventListener("click", () => download(2, "记得-promo-880x560.png"));
+render();
+</script>
+</body>
+</html>

@@ -105,7 +105,7 @@ export const en = {
   "profile.aiNetworkErr": "✗ Network error, try again",
   "profile.aiHint": "Your key is stored locally and requests go directly to DeepSeek, never through our server. Get a key at platform.deepseek.com.",
 
-  "login.title": "Sign in to Helper",
+  "login.title": "Sign in to Remind",
   "login.subtitle": "Sign in to sync across devices; you can also use the app locally without signing in.",
   "login.idPlaceholder": "Username or email",
   "login.pwPlaceholder": "Password",
@@ -150,7 +150,7 @@ export const en = {
   "clip.copyFailed": "Copy failed",
   "clip.readFailed": "Couldn't read clipboard",
   "clip.saveImageFailed": "Couldn't save image",
-  "clip.menuSaveImage": "Copy image to Helper clipboard",
+  "clip.menuSaveImage": "Copy image to Remind clipboard",
   "clip.actionFailed": "Action failed",
   "clip.imageTooLarge": "Image too large to save",
   "clip.autoCaptureLabel": "Auto-capture copied text",

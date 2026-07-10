@@ -1,8 +1,8 @@
-# Privacy Policy — Helper 助手
+# Privacy Policy — 记得 (Remind)
 
 **Effective date: 2026-07-07**
 
-Helper 助手 ("the Extension") is a browser side‑panel tool for capturing reminders, timers, to‑dos, and clipboard snippets from a single line of text. This policy explains what data the Extension handles and how.
+记得 (Remind) ("the Extension") is a browser side‑panel tool for capturing reminders, timers, to‑dos, and clipboard snippets from a single line of text. This policy explains what data the Extension handles and how.
 
 We designed the Extension to be **local‑first**: it works without an account, and by default your data never leaves your browser.
 
@@ -67,11 +67,11 @@ Questions or data‑deletion requests: **niutengfei123@gmail.com**
 
 ---
 
-# 隐私政策 —— Helper 助手
+# 隐私政策 —— 记得
 
 **生效日期:2026-07-07**
 
-Helper 助手(下称"本扩展")是一款浏览器侧边栏工具,用一句话快速创建提醒、计时、待办并收藏剪贴板内容。本政策说明本扩展会处理哪些数据、如何处理。
+记得(下称"本扩展")是一款浏览器侧边栏工具,用一句话快速创建提醒、计时、待办并收藏剪贴板内容。本政策说明本扩展会处理哪些数据、如何处理。
 
 本扩展采用**本地优先**设计:无需账号即可使用,默认情况下你的数据不会离开你的浏览器。
 

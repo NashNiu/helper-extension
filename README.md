@@ -1,4 +1,4 @@
-# Helper 浏览器扩展
+# 记得 浏览器扩展
 
 [English](README.en.md)
 
