@@ -27,6 +27,21 @@ body {
   color: var(--color-ink);
 }
 
+/* 可点击元素显示手型光标(Tailwind v4 Preflight 默认不给 button 指针光标);
+   放在 base 层,个别元素仍可用 cursor-* 工具类覆盖。禁用态用 not-allowed。 */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  label[for],
+  summary,
+  a[href] {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
 /* 个人中心整页右滑入场 */
 @keyframes slide-in-right {
   from { transform: translateX(100%); }
