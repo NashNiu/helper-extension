@@ -153,6 +153,7 @@ export const en = {
   "clip.menuSaveImage": "Copy image to Helper clipboard",
   "clip.actionFailed": "Action failed",
   "clip.imageTooLarge": "Image too large to save",
+  "clip.autoCaptureLabel": "Auto-capture copied text",
 } as const;
 
 export type MessageKey = keyof typeof en;

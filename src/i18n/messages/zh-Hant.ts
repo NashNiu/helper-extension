@@ -155,4 +155,5 @@ export const zhHant: Record<keyof typeof en, string> = {
   "clip.menuSaveImage": "複製圖片到 Helper 剪貼簿",
   "clip.actionFailed": "操作失敗",
   "clip.imageTooLarge": "圖片過大，無法儲存",
+  "clip.autoCaptureLabel": "自動捕獲複製的文字",
 };

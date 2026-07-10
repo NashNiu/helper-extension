@@ -1,5 +1,19 @@
 import type { ClipItem } from "./clipboardStore";
 
+export const CAPTURE_TEXT = "clipboard/capture-text";
+
+export interface CaptureTextMsg {
+  kind: typeof CAPTURE_TEXT;
+  text: string;
+  source: string;
+}
+
+export function buildTextCapture(rawText: string, hostname: string): CaptureTextMsg | null {
+  const text = rawText.trim();
+  if (!text) return null;
+  return { kind: CAPTURE_TEXT, text, source: hostname };
+}
+
 export function hostnameOf(url: string): string {
   try {
     return new URL(url).hostname;
