@@ -107,7 +107,7 @@ export const zhHans: Record<keyof typeof en, string> = {
   "profile.aiNetworkErr": "✗ 网络错误，请重试",
   "profile.aiHint": "Key 仅存本地，请求直连 DeepSeek，不经过我方服务器。可在 platform.deepseek.com 获取 Key。",
 
-  "login.title": "登录 Helper",
+  "login.title": "登录「记得」",
   "login.subtitle": "登录后数据可在多设备间同步；不登录也能在本机使用。",
   "login.idPlaceholder": "用户名或邮箱",
   "login.pwPlaceholder": "密码",
@@ -152,7 +152,7 @@ export const zhHans: Record<keyof typeof en, string> = {
   "clip.copyFailed": "复制失败",
   "clip.readFailed": "读取剪贴板失败",
   "clip.saveImageFailed": "图片保存失败",
-  "clip.menuSaveImage": "复制图片到 Helper 剪贴板",
+  "clip.menuSaveImage": "复制图片到「记得」剪贴板",
   "clip.actionFailed": "操作失败",
   "clip.imageTooLarge": "图片过大，无法保存",
   "clip.autoCaptureLabel": "自动捕获复制的文字",

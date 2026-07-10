@@ -1,4 +1,4 @@
-# Helper Browser Extension
+# 记得 (Remind) Browser Extension
 
 [中文](README.md)
 
