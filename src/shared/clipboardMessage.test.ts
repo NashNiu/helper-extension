@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { hostnameOf, makeTextItem, makeImageItem } from "./clipboardMessage";
+import { buildTextCapture, CAPTURE_TEXT, hostnameOf, makeTextItem, makeImageItem } from "./clipboardMessage";
+
+describe("buildTextCapture", () => {
+  it("trims and wraps non-empty text", () => {
+    expect(buildTextCapture("  hi  ", "a.com")).toEqual({ kind: CAPTURE_TEXT, text: "hi", source: "a.com" });
+  });
+  it("returns null for blank text", () => {
+    expect(buildTextCapture("   \n ", "a.com")).toBeNull();
+  });
+});
 
 describe("hostnameOf", () => {
   it("extracts hostname", () => {

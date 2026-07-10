@@ -32,6 +32,7 @@ export interface ClipItem {
 
 export interface ClipSettings {
   limit: number;
+  autoCapture: boolean;
 }
 
 export interface ClipGroups {
@@ -97,8 +98,11 @@ export async function setItems(items: ClipItem[]): Promise<void> {
 }
 
 export async function getSettings(): Promise<ClipSettings> {
-  const s = await storageGet<ClipSettings>(CLIP_SETTINGS_KEY);
-  return s && typeof s.limit === "number" ? s : { limit: DEFAULT_LIMIT };
+  const s = await storageGet<Partial<ClipSettings>>(CLIP_SETTINGS_KEY);
+  return {
+    limit: s && typeof s.limit === "number" ? s.limit : DEFAULT_LIMIT,
+    autoCapture: s && typeof s.autoCapture === "boolean" ? s.autoCapture : true,
+  };
 }
 
 export function addItem(item: ClipItem): Promise<ClipItem[]> {
@@ -112,10 +116,18 @@ export function addItem(item: ClipItem): Promise<ClipItem[]> {
 
 export function setLimit(limit: number): Promise<ClipItem[]> {
   return enqueue(async () => {
-    await storageSet(CLIP_SETTINGS_KEY, { limit });
+    const settings = await getSettings();
+    await storageSet(CLIP_SETTINGS_KEY, { ...settings, limit });
     const next = cull(await getItems(), limit);
     await setItems(next);
     return next;
+  });
+}
+
+export function setAutoCapture(enabled: boolean): Promise<void> {
+  return enqueue(async () => {
+    const settings = await getSettings();
+    await storageSet(CLIP_SETTINGS_KEY, { ...settings, autoCapture: enabled });
   });
 }
 

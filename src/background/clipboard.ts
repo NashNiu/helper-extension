@@ -1,7 +1,7 @@
 import { translate } from "../i18n/core";
 import { currentLocale } from "../shared/locale";
-import { addItem, MAX_IMAGE_BYTES } from "../shared/clipboardStore";
-import { hostnameOf, makeImageItem } from "../shared/clipboardMessage";
+import { addItem, getSettings, MAX_IMAGE_BYTES } from "../shared/clipboardStore";
+import { CAPTURE_TEXT, hostnameOf, makeImageItem, makeTextItem, type CaptureTextMsg } from "../shared/clipboardMessage";
 
 const MENU_ID = "helper-clip-image";
 const ICON = "icon-128.png";
@@ -58,6 +58,16 @@ chrome.contextMenus.onClicked.addListener((info) => {
   if (info.menuItemId === MENU_ID && info.srcUrl) {
     void saveImage(info.srcUrl, hostnameOf(info.pageUrl ?? ""));
   }
+});
+
+async function handleCaptureText(msg: CaptureTextMsg): Promise<void> {
+  const settings = await getSettings();
+  if (!settings.autoCapture) return; // 权威门控:关闭时忽略(即使残留旧内容脚本发来)
+  await addItem(makeTextItem({ text: msg.text, source: msg.source, id: crypto.randomUUID(), createdAt: Date.now() }));
+}
+
+chrome.runtime.onMessage.addListener((msg: CaptureTextMsg) => {
+  if (msg && msg.kind === CAPTURE_TEXT) void handleCaptureText(msg);
 });
 
 export async function initClipboard(): Promise<void> {
