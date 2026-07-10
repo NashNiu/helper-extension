@@ -9,6 +9,7 @@ import {
   addItem,
   getSettings,
   setLimit,
+  setAutoCapture,
   getItems,
   pinItem,
   unpinItem,
@@ -120,8 +121,23 @@ describe("applyPin/applyUnpin/applyRemove", () => {
 
 describe("async wrappers", () => {
   beforeEach(() => mockChrome());
-  it("getSettings returns default limit when unset", async () => {
-    expect(await getSettings()).toEqual({ limit: DEFAULT_LIMIT });
+  it("getSettings returns defaults when unset", async () => {
+    expect(await getSettings()).toEqual({ limit: DEFAULT_LIMIT, autoCapture: true });
+  });
+  it("getSettings migrates a legacy limit-only record (autoCapture defaults true)", async () => {
+    const data = mockChrome();
+    data["helper.clipboard.settings"] = { limit: 7 };
+    expect(await getSettings()).toEqual({ limit: 7, autoCapture: true });
+  });
+  it("setLimit preserves autoCapture", async () => {
+    await setAutoCapture(false);
+    await setLimit(5);
+    expect(await getSettings()).toEqual({ limit: 5, autoCapture: false });
+  });
+  it("setAutoCapture preserves limit", async () => {
+    await setLimit(3);
+    await setAutoCapture(false);
+    expect(await getSettings()).toEqual({ limit: 3, autoCapture: false });
   });
   it("addItem dedupes and culls, persisting newest-first", async () => {
     await setLimit(2);
