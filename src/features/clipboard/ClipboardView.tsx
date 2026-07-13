@@ -6,11 +6,7 @@ import {
   unpinItem,
   removeItem,
   addItem,
-  getSettings,
-  setLimit,
-  setAutoCapture,
   CLIP_ITEMS_KEY,
-  DEFAULT_LIMIT,
   MAX_IMAGE_BYTES,
   type ClipItem,
 } from "../../shared/clipboardStore";
@@ -159,8 +155,6 @@ export function ClipboardView({ refreshKey }: { refreshKey: number }) {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
-  const [limitDraft, setLimitDraft] = useState(String(DEFAULT_LIMIT));
-  const [autoCapture, setAutoCaptureState] = useState(true);
   const [toast, setToast] = useState("");
 
   const reload = useCallback(async () => {
@@ -171,13 +165,6 @@ export function ClipboardView({ refreshKey }: { refreshKey: number }) {
   useEffect(() => {
     void reload();
   }, [reload, refreshKey]);
-
-  useEffect(() => {
-    void getSettings().then((s) => {
-      setLimitDraft(String(s.limit));
-      setAutoCaptureState(s.autoCapture);
-    });
-  }, [refreshKey]);
 
   // Live refresh when background captures write to storage
   useEffect(() => {
@@ -289,17 +276,6 @@ export function ClipboardView({ refreshKey }: { refreshKey: number }) {
     }
   }, [flash, t]);
 
-  const commitLimit = useCallback(async () => {
-    const n = Math.max(1, Math.min(1000, Math.round(Number(limitDraft)) || DEFAULT_LIMIT));
-    setLimitDraft(String(n));
-    setItems(await setLimit(n));
-  }, [limitDraft]);
-
-  const toggleAutoCapture = useCallback(async (next: boolean) => {
-    setAutoCaptureState(next);
-    await setAutoCapture(next);
-  }, []);
-
   return (
     <div className="relative flex h-full flex-col">
       <div className="flex flex-col gap-2 border-b border-line bg-surface px-3 py-2.5">
@@ -332,9 +308,7 @@ export function ClipboardView({ refreshKey }: { refreshKey: number }) {
         </div>
       </div>
 
-      <NotepadBox />
-
-      <div className="flex items-center justify-between gap-2 border-b border-line bg-surface px-3 py-2">
+      <div className="flex items-center gap-2 border-b border-line bg-surface px-3 py-2">
         <button
           type="button"
           onClick={onPasteZone}
@@ -347,33 +321,9 @@ export function ClipboardView({ refreshKey }: { refreshKey: number }) {
           </svg>
           {t("clip.addFromClipboard")}
         </button>
-        <label className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted">
-          {t("clip.limitLabel")}
-          <input
-            type="number"
-            min={1}
-            max={1000}
-            value={limitDraft}
-            onChange={(e) => setLimitDraft(e.target.value)}
-            onBlur={() => void commitLimit()}
-            onKeyDown={(e) => { if (e.key === "Enter") void commitLimit(); }}
-            className="w-14 rounded-md border border-line bg-ground px-1.5 py-1 text-center text-xs text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-          />
-          {t("clip.limitUnit")}
-        </label>
       </div>
 
-      <div className="flex items-center border-b border-line bg-surface px-3 py-2">
-        <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
-          <input
-            type="checkbox"
-            checked={autoCapture}
-            onChange={(e) => void toggleAutoCapture(e.target.checked)}
-            className="h-3.5 w-3.5 accent-accent"
-          />
-          {t("clip.autoCaptureLabel")}
-        </label>
-      </div>
+      <NotepadBox />
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {loading ? (

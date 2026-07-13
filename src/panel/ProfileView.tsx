@@ -10,6 +10,7 @@ import type { LocalePref } from "../i18n/core";
 import type { MessageKey } from "../i18n/messages/en";
 import { getKey, setKey, clearKey } from "../shared/ai/apiKey";
 import { validateKey } from "../shared/ai/deepseek";
+import { getSettings, setLimit, setAutoCapture, DEFAULT_LIMIT } from "../shared/clipboardStore";
 
 type Seg = "todos" | "reminders";
 
@@ -342,6 +343,61 @@ function AiKeyCard() {
   );
 }
 
+function ClipboardSettingsCard() {
+  const t = useT();
+  const [limitDraft, setLimitDraft] = useState(String(DEFAULT_LIMIT));
+  const [autoCapture, setAuto] = useState(true);
+
+  useEffect(() => {
+    void getSettings().then((s) => {
+      setLimitDraft(String(s.limit));
+      setAuto(s.autoCapture);
+    });
+  }, []);
+
+  async function commitLimit() {
+    const n = Math.max(1, Math.min(1000, Math.round(Number(limitDraft)) || DEFAULT_LIMIT));
+    setLimitDraft(String(n));
+    await setLimit(n);
+  }
+
+  async function toggle(next: boolean) {
+    setAuto(next);
+    await setAutoCapture(next);
+  }
+
+  return (
+    <div className="mb-3 rounded-2xl border border-line bg-surface p-4">
+      <div className="mb-3 text-sm font-semibold text-ink">{t("profile.clipboardSection")}</div>
+      <label className="flex items-center justify-between gap-2 text-sm text-ink">
+        <span>{t("clip.limitLabel")}</span>
+        <span className="flex items-center gap-1.5 text-muted">
+          <input
+            type="number"
+            min={1}
+            max={1000}
+            value={limitDraft}
+            onChange={(e) => setLimitDraft(e.target.value)}
+            onBlur={() => void commitLimit()}
+            onKeyDown={(e) => { if (e.key === "Enter") void commitLimit(); }}
+            className="w-16 rounded-md border border-line bg-ground px-1.5 py-1 text-center text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+          />
+          {t("clip.limitUnit")}
+        </span>
+      </label>
+      <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-ink">
+        <input
+          type="checkbox"
+          checked={autoCapture}
+          onChange={(e) => void toggle(e.target.checked)}
+          className="h-4 w-4 accent-accent"
+        />
+        {t("clip.autoCaptureLabel")}
+      </label>
+    </div>
+  );
+}
+
 export function ProfileView({
   onBack,
   onChanged,
@@ -367,6 +423,7 @@ export function ProfileView({
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3.5">
         <AiKeyCard />
+        <ClipboardSettingsCard />
         {/* 语言选择器 */}
         <div className="flex items-center justify-between rounded-2xl border border-line bg-surface px-4 py-3">
           <span className="text-sm text-ink">{t("profile.language")}</span>
