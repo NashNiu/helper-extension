@@ -18,6 +18,7 @@ import { makeImageItem, makeTextItem } from "../../shared/clipboardMessage";
 import { Loading } from "../../components/Loading";
 import { useT } from "../../i18n/react";
 import type { MessageKey } from "../../i18n/messages/en";
+import { NotepadBox } from "./NotepadBox";
 
 type Filter = "all" | "text" | "image";
 
@@ -330,6 +331,8 @@ export function ClipboardView({ refreshKey }: { refreshKey: number }) {
           ))}
         </div>
       </div>
+
+      <NotepadBox />
 
       <div className="flex items-center justify-between gap-2 border-b border-line bg-surface px-3 py-2">
         <button
