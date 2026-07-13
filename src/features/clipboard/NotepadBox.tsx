@@ -96,18 +96,18 @@ export function NotepadBox({ onAdded }: { onAdded?: () => void }) {
   const addToClipboard = useCallback(async () => {
     const current = contentRef.current;
     if (!current.trim()) return;
+    // 先取消待写防抖,避免 await addItem 期间旧内容被回写、覆盖掉随后清空
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
     try {
       await addItem(makeTextItem({ text: current, source: "manual", id: crypto.randomUUID(), createdAt: Date.now() }));
-      // 清空记事本:先取消待写防抖,再落盘空串
-      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
-      pendingRef.current = false;
       setContent("");
       contentRef.current = "";
+      pendingRef.current = false;
       const saved = await saveNote("", Date.now());
       setSavedAt(saved.updatedAt);
       onAdded?.();
     } catch {
-      /* 失败则保留内容,用户可重试 */
+      /* 失败则保留内容(pendingRef 仍为 true,卸载时会补存),用户可重试 */
     }
   }, [onAdded]);
 
