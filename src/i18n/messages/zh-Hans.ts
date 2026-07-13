@@ -156,4 +156,11 @@ export const zhHans: Record<keyof typeof en, string> = {
   "clip.actionFailed": "操作失败",
   "clip.imageTooLarge": "图片过大，无法保存",
   "clip.autoCaptureLabel": "自动捕获复制的文字",
+  "notepad.title": "记事本",
+  "notepad.placeholder": "随手写点什么……",
+  "notepad.saved": "已自动保存",
+  "notepad.charCount": "{n} 字",
+  "notepad.expand": "放大",
+  "notepad.collapse": "收起",
+  "notepad.toggle": "展开/折叠",
 };

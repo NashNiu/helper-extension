@@ -156,4 +156,11 @@ export const zhHant: Record<keyof typeof en, string> = {
   "clip.actionFailed": "操作失敗",
   "clip.imageTooLarge": "圖片過大，無法儲存",
   "clip.autoCaptureLabel": "自動捕獲複製的文字",
+  "notepad.title": "記事本",
+  "notepad.placeholder": "隨手寫點什麼……",
+  "notepad.saved": "已自動儲存",
+  "notepad.charCount": "{n} 字",
+  "notepad.expand": "放大",
+  "notepad.collapse": "收起",
+  "notepad.toggle": "展開/摺疊",
 };

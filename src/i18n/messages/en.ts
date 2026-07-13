@@ -154,6 +154,13 @@ export const en = {
   "clip.actionFailed": "Action failed",
   "clip.imageTooLarge": "Image too large to save",
   "clip.autoCaptureLabel": "Auto-capture copied text",
+  "notepad.title": "Notes",
+  "notepad.placeholder": "Jot something down…",
+  "notepad.saved": "Saved",
+  "notepad.charCount": "{n} chars",
+  "notepad.expand": "Expand",
+  "notepad.collapse": "Collapse",
+  "notepad.toggle": "Toggle notes",
 } as const;
 
 export type MessageKey = keyof typeof en;
