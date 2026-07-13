@@ -104,6 +104,7 @@ export const en = {
   "profile.aiInvalid": "✗ Invalid key",
   "profile.aiNetworkErr": "✗ Network error, try again",
   "profile.aiHint": "Your key is stored locally and requests go directly to DeepSeek, never through our server. Get a key at platform.deepseek.com.",
+  "profile.clipboardSection": "Clipboard",
 
   "login.title": "Sign in to Remind",
   "login.subtitle": "Sign in to sync across devices; you can also use the app locally without signing in.",
@@ -154,6 +155,15 @@ export const en = {
   "clip.actionFailed": "Action failed",
   "clip.imageTooLarge": "Image too large to save",
   "clip.autoCaptureLabel": "Auto-capture copied text",
+  "notepad.title": "Notes",
+  "notepad.placeholder": "Jot something down…",
+  "notepad.saved": "Saved",
+  "notepad.charCount": "{n} chars",
+  "notepad.expand": "Expand",
+  "notepad.collapse": "Collapse",
+  "notepad.toggle": "Toggle notes",
+  "notepad.addToClipboard": "Add to clipboard",
+  "notepad.addedToClipboard": "Added to clipboard",
 } as const;
 
 export type MessageKey = keyof typeof en;

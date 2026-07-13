@@ -106,6 +106,7 @@ export const zhHant: Record<keyof typeof en, string> = {
   "profile.aiInvalid": "✗ Key 無效",
   "profile.aiNetworkErr": "✗ 網路錯誤，請重試",
   "profile.aiHint": "Key 僅存本機，請求直連 DeepSeek，不經過我方伺服器。可在 platform.deepseek.com 取得 Key。",
+  "profile.clipboardSection": "剪貼簿",
 
   "login.title": "登入「記得」",
   "login.subtitle": "登入後資料可在多裝置間同步；不登入也能在本機使用。",
@@ -156,4 +157,13 @@ export const zhHant: Record<keyof typeof en, string> = {
   "clip.actionFailed": "操作失敗",
   "clip.imageTooLarge": "圖片過大，無法儲存",
   "clip.autoCaptureLabel": "自動捕獲複製的文字",
+  "notepad.title": "記事本",
+  "notepad.placeholder": "隨手寫點什麼……",
+  "notepad.saved": "已自動儲存",
+  "notepad.charCount": "{n} 字",
+  "notepad.expand": "放大",
+  "notepad.collapse": "收起",
+  "notepad.toggle": "展開/摺疊",
+  "notepad.addToClipboard": "加入剪貼簿",
+  "notepad.addedToClipboard": "已加入剪貼簿",
 };

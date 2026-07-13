@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>记得 · 大横幅生成器 (1400×560)</title>
+<style>
+  body { margin:0; background:#eef1f2; font-family:"Microsoft YaHei","PingFang SC",sans-serif; color:#222; display:flex; flex-direction:column; align-items:center; gap:16px; padding:28px; }
+  h1 { font-size:16px; font-weight:600; margin:0; }
+  .frame { box-shadow:0 10px 32px rgba(0,0,0,.20); border-radius:10px; overflow:hidden; width:700px; }
+  canvas { display:block; width:700px; height:280px; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:center; }
+  button { font:inherit; font-size:14px; padding:9px 18px; border:0; border-radius:8px; background:#2F8878; color:#fff; cursor:pointer; }
+  button.sec { background:#e2e6e7; color:#333; }
+  label { font-size:13px; color:#555; white-space:nowrap; }
+  input { font:inherit; font-size:13px; padding:6px 9px; border:1px solid #ccc; border-radius:6px; width:340px; }
+  .fields { display:flex; flex-direction:column; gap:8px; background:#fff; padding:16px 18px; border-radius:10px; }
+  .fld { display:flex; gap:12px; align-items:center; justify-content:space-between; }
+  .hint { font-size:12px; color:#888; max-width:520px; text-align:center; line-height:1.7; }
+</style>
+</head>
+<body>
+  <h1>「记得」Chrome 商店大横幅 Marquee · 1400 × 560（预览按比例缩小）</h1>
+  <div class="frame"><canvas id="c" width="1400" height="560"></canvas></div>
+  <div class="row">
+    <button id="dl">下载 JPEG（1400×560 · 无 alpha · 商店推荐）</button>
+    <button id="dlpng" class="sec">下载 PNG（1400×560）</button>
+  </div>
+  <div class="fields">
+    <div class="fld"><label>标题</label><input id="title" value="记得" /></div>
+    <div class="fld"><label>标语</label><input id="tag" value="一句话，记住每一件事" /></div>
+    <div class="fld"><label>示例输入</label><input id="demo" value="明天下午3点 开会" /></div>
+    <div class="fld"><label>结果说明</label><input id="result" value="已设提醒 · 明天 15:00 到点通知" /></div>
+    <div class="fld"><label>功能行</label><input id="feat" value="提醒 · 计时 · 待办 · 剪贴板" /></div>
+    <div class="fld"><label>底部小字</label><input id="sub" value="本地优先 · 免登录 · 侧边栏常驻 · 完全免费" /></div>
+  </div>
+  <p class="hint">商店大横幅要求 JPEG 或 24-bit PNG（不含透明通道）。用第一个「下载 JPEG」按钮最稳妥。改文字实时预览。</p>
+
+<script>
+const c = document.getElementById("c");
+const TEAL_A = "#2F8878", TEAL_B = "#164E44", ACCENT = "#2F8878";
+
+function rr(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function drawBadge(ctx, cx, cy, s) {
+  const x = cx - s / 2, y = cy - s / 2;
+  ctx.fillStyle = "#fff";
+  rr(ctx, x, y, s, s, s * 0.28);
+  ctx.fill();
+  ctx.strokeStyle = ACCENT;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const R = s * 0.30, dialY = cy + s * 0.06;
+  ctx.lineWidth = s * 0.09;
+  ctx.beginPath();
+  ctx.moveTo(cx - s * 0.13, y + s * 0.15);
+  ctx.lineTo(cx + s * 0.13, y + s * 0.15);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx, y + s * 0.15);
+  ctx.lineTo(cx, dialY - R);
+  ctx.stroke();
+  ctx.lineWidth = s * 0.085;
+  ctx.beginPath();
+  ctx.arc(cx, dialY, R, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = s * 0.075;
+  ctx.beginPath();
+  ctx.moveTo(cx, dialY);
+  ctx.lineTo(cx, dialY - R * 0.6);
+  ctx.moveTo(cx, dialY);
+  ctx.lineTo(cx + R * 0.52, dialY + R * 0.1);
+  ctx.stroke();
+}
+
+function clockIcon(ctx, cx, cy, r, color, lw) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lw;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx, cy - r * 0.55);
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + r * 0.5, cy + r * 0.15);
+  ctx.stroke();
+}
+
+function draw(ctx) {
+  const W = 1400, H = 560;
+
+  // 背景对角渐变（JPEG 无透明，先铺满不透明底色）
+  const g = ctx.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, TEAL_A);
+  g.addColorStop(1, TEAL_B);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // 右侧柔光
+  const glow = ctx.createRadialGradient(1150, 90, 20, 1150, 90, 720);
+  glow.addColorStop(0, "rgba(255,255,255,0.12)");
+  glow.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, H);
+
+  // 装饰环
+  ctx.strokeStyle = "rgba(255,255,255,0.05)";
+  ctx.lineWidth = 70;
+  ctx.beginPath();
+  ctx.arc(1330, 600, 380, 0, Math.PI * 2);
+  ctx.stroke();
+
+  const PAD = 90;
+
+  // 品牌锁定区
+  drawBadge(ctx, PAD + 60, 130, 118);
+  ctx.fillStyle = "#ffffff";
+  ctx.textBaseline = "alphabetic";
+  ctx.font = '700 100px "Microsoft YaHei","PingFang SC",sans-serif';
+  ctx.fillText(document.getElementById("title").value, PAD + 145, 168);
+
+  // 标语（hero）
+  ctx.fillStyle = "rgba(255,255,255,0.95)";
+  ctx.font = '400 50px "Microsoft YaHei","PingFang SC",sans-serif';
+  ctx.fillText(document.getElementById("tag").value, PAD, 300);
+
+  // 功能行胶囊
+  const feat = document.getElementById("feat").value;
+  ctx.font = '600 32px "Microsoft YaHei","PingFang SC",sans-serif';
+  const fw = ctx.measureText(feat).width;
+  ctx.fillStyle = "rgba(255,255,255,0.15)";
+  rr(ctx, PAD, 340, fw + 52, 58, 29);
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.textBaseline = "middle";
+  ctx.fillText(feat, PAD + 26, 340 + 30);
+  ctx.textBaseline = "alphabetic";
+
+  // 底部小字
+  ctx.fillStyle = "rgba(255,255,255,0.72)";
+  ctx.font = '400 28px "Microsoft YaHei","PingFang SC",sans-serif';
+  ctx.fillText(document.getElementById("sub").value, PAD, 480);
+
+  // 右侧悬浮输入条（主视觉）
+  const bx = 770, by = 190, bw = 540, bh = 96;
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.22)";
+  ctx.shadowBlur = 34;
+  ctx.shadowOffsetY = 12;
+  ctx.fillStyle = "#ffffff";
+  rr(ctx, bx, by, bw, bh, bh / 2);
+  ctx.fill();
+  ctx.restore();
+
+  clockIcon(ctx, bx + 52, by + bh / 2, 21, ACCENT, 4.4);
+  ctx.fillStyle = "#2a2a2a";
+  ctx.font = '500 34px "Microsoft YaHei","PingFang SC",sans-serif';
+  ctx.textBaseline = "middle";
+  ctx.fillText(document.getElementById("demo").value, bx + 92, by + bh / 2 + 2);
+  const sc = bx + bw - bh / 2 - 12, scy = by + bh / 2, sr = bh / 2 - 14;
+  ctx.fillStyle = ACCENT;
+  ctx.beginPath();
+  ctx.arc(sc, scy, sr, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 4.4;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(sc - 11, scy);
+  ctx.lineTo(sc + 9, scy);
+  ctx.moveTo(sc + 2, scy - 9);
+  ctx.lineTo(sc + 10, scy);
+  ctx.lineTo(sc + 2, scy + 9);
+  ctx.stroke();
+  ctx.textBaseline = "alphabetic";
+
+  // 结果说明（带对勾）
+  const ry = 350;
+  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  ctx.lineWidth = 4.4;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(bx + 2, ry - 7);
+  ctx.lineTo(bx + 10, ry + 1);
+  ctx.lineTo(bx + 24, ry - 16);
+  ctx.stroke();
+  ctx.fillStyle = "rgba(255,255,255,0.9)";
+  ctx.font = '400 30px "Microsoft YaHei","PingFang SC",sans-serif';
+  ctx.fillText(document.getElementById("result").value, bx + 40, ry + 2);
+}
+
+function render() {
+  const ctx = c.getContext("2d");
+  ctx.clearRect(0, 0, c.width, c.height);
+  draw(ctx);
+}
+
+function download(type, name, quality) {
+  const off = document.createElement("canvas");
+  off.width = 1400;
+  off.height = 560;
+  draw(off.getContext("2d"));
+  off.toBlob((b) => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(b);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }, type, quality);
+}
+
+document.querySelectorAll("input").forEach((i) => i.addEventListener("input", render));
+document.getElementById("dl").addEventListener("click", () => download("image/jpeg", "记得-marquee-1400x560.jpg", 0.95));
+document.getElementById("dlpng").addEventListener("click", () => download("image/png", "记得-marquee-1400x560.png"));
+render();
+</script>
+</body>
+</html>
