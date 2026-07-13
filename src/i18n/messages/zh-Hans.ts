@@ -106,6 +106,7 @@ export const zhHans: Record<keyof typeof en, string> = {
   "profile.aiInvalid": "✗ Key 无效",
   "profile.aiNetworkErr": "✗ 网络错误，请重试",
   "profile.aiHint": "Key 仅存本地，请求直连 DeepSeek，不经过我方服务器。可在 platform.deepseek.com 获取 Key。",
+  "profile.clipboardSection": "剪贴板",
 
   "login.title": "登录「记得」",
   "login.subtitle": "登录后数据可在多设备间同步；不登录也能在本机使用。",
@@ -163,4 +164,6 @@ export const zhHans: Record<keyof typeof en, string> = {
   "notepad.expand": "放大",
   "notepad.collapse": "收起",
   "notepad.toggle": "展开/折叠",
+  "notepad.addToClipboard": "添加到剪贴板",
+  "notepad.addedToClipboard": "已添加到剪贴板",
 };
