@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getNote, saveNote, NOTEPAD_KEY, NOTE_MAX_CHARS } from "../../shared/notepadStore";
+import { addItem } from "../../shared/clipboardStore";
+import { makeTextItem } from "../../shared/clipboardMessage";
 import { useT } from "../../i18n/react";
 
 type Mode = "collapsed" | "compact" | "expanded";
@@ -42,8 +44,17 @@ function ChevronIcon({ className = "" }: { className?: string }) {
     </svg>
   );
 }
+function AddToClipboardIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+      <path d="M15 12v6M12 15h6" />
+    </svg>
+  );
+}
 
-export function NotepadBox() {
+export function NotepadBox({ onAdded }: { onAdded?: () => void }) {
   const t = useT();
   const [mode, setMode] = useState<Mode>("compact");
   const [content, setContent] = useState("");
@@ -81,6 +92,24 @@ export function NotepadBox() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => { void flush(next); }, 500);
   }, [flush]);
+
+  const addToClipboard = useCallback(async () => {
+    const current = contentRef.current;
+    if (!current.trim()) return;
+    try {
+      await addItem(makeTextItem({ text: current, source: "manual", id: crypto.randomUUID(), createdAt: Date.now() }));
+      // 清空记事本:先取消待写防抖,再落盘空串
+      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+      pendingRef.current = false;
+      setContent("");
+      contentRef.current = "";
+      const saved = await saveNote("", Date.now());
+      setSavedAt(saved.updatedAt);
+      onAdded?.();
+    } catch {
+      /* 失败则保留内容,用户可重试 */
+    }
+  }, [onAdded]);
 
   // 卸载:清计时器;有未落盘改动则立即写一次
   useEffect(() => {
@@ -140,6 +169,16 @@ export function NotepadBox() {
           {t("notepad.title")}
         </span>
         <div className="ml-auto flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => void addToClipboard()}
+            disabled={!content.trim()}
+            title={t("notepad.addToClipboard")}
+            aria-label={t("notepad.addToClipboard")}
+            className={`${iconBtn} disabled:opacity-40`}
+          >
+            <AddToClipboardIcon />
+          </button>
           <button
             type="button"
             onClick={() => setMode(mode === "expanded" ? "compact" : "expanded")}
