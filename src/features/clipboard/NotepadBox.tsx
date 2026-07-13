@@ -60,13 +60,17 @@ export function NotepadBox() {
       setContent(n.content);
       contentRef.current = n.content;
       setSavedAt(n.updatedAt);
-    });
+    }).catch(() => {});
   }, []);
 
   const flush = useCallback(async (text: string) => {
-    const saved = await saveNote(text, Date.now());
-    pendingRef.current = false;
-    setSavedAt(saved.updatedAt);
+    try {
+      const saved = await saveNote(text, Date.now());
+      pendingRef.current = false;
+      setSavedAt(saved.updatedAt);
+    } catch {
+      /* keep last-good savedAt; a later change will retry */
+    }
   }, []);
 
   const onChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -82,7 +86,7 @@ export function NotepadBox() {
   useEffect(() => {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
-      if (pendingRef.current) void saveNote(contentRef.current, Date.now());
+      if (pendingRef.current) void saveNote(contentRef.current, Date.now()).catch(() => {});
     };
   }, []);
 
@@ -91,6 +95,8 @@ export function NotepadBox() {
     const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
       if (area !== "local" || !changes[NOTEPAD_KEY]) return;
       if (focusedRef.current) return;
+      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+      pendingRef.current = false;
       const v = changes[NOTEPAD_KEY].newValue as { content?: string; updatedAt?: number } | undefined;
       const c = typeof v?.content === "string" ? v.content : "";
       setContent(c);
