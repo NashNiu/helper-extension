@@ -292,6 +292,34 @@ export function parseReminder(input: string, now: Date): ParsedReminder | null {
   return { message, trigger_at: at.toISOString() };
 }
 
+export interface ParsedDailyReminder {
+  message: string;
+  hour: number;
+  minute: number;
+}
+
+const DAILY_CUE = /每天|每日|每晚|每早/;
+
+// 剔除每日线索词后,复用 cleanReminderMessage 清洗时刻/提示词。
+function cleanDailyMessage(input: string): string {
+  const withoutCue = input.replace(/每天早上|每天早晨|每天晚上|每天|每日|每晚|每早/g, "");
+  return cleanReminderMessage(withoutCue);
+}
+
+/** 自然语言 → 每日提醒(内容 + 时:分);无每日线索或无时刻返回 null。 */
+export function parseDailyReminder(input: string): ParsedDailyReminder | null {
+  if (!DAILY_CUE.test(input)) return null;
+  // 归一化用于时刻解析:每晚→晚上、每早→早上,每天/每日删除,让 parseClock 的时段词生效。
+  const clockSrc = input
+    .replace(/每晚/g, "晚上")
+    .replace(/每早/g, "早上")
+    .replace(/每天|每日/g, "");
+  const clock = parseClock(clockSrc);
+  if (!clock) return null;
+  const message = cleanDailyMessage(input) || input;
+  return { message, hour: clock.hour, minute: clock.minute };
+}
+
 /** 归类:timer / reminder / todo(只返回单一类型;歧义归 todo)。 */
 export function classify(input: string, now: Date): { types: AssistantType[] } {
   const timerCue = /计时|計時|倒计时|倒計時|番茄|蕃茄|专注|專注|定时|定時/.test(input) || EN_TIMER_CUE.test(input);
