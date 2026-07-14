@@ -145,3 +145,12 @@ export function dailyIdFromAlarm(name: string): number | null {
   const id = Number(name.slice(DAILY_ALARM_PREFIX.length));
   return Number.isInteger(id) ? id : null;
 }
+
+// 到点通知的容差(ms):闹钟被投递的时刻比计划时刻晚不超过此值才补弹;
+// 超过则视为「浏览器当时未运行而错过」,按设计只重排、不补提醒。
+export const DAILY_CATCHUP_TOLERANCE_MS = 5 * 60_000;
+
+// 该次每日闹钟是否已错过补发窗口(投递延迟超过容差)。
+export function isDailyFireMissed(scheduledTime: number, now: number): boolean {
+  return now - scheduledTime > DAILY_CATCHUP_TOLERANCE_MS;
+}

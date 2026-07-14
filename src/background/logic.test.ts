@@ -7,6 +7,8 @@ import {
   DAILY_ALARM_PREFIX,
   nextDailyTrigger,
   dailyIdFromAlarm,
+  isDailyFireMissed,
+  DAILY_CATCHUP_TOLERANCE_MS,
   isLongBreakCycle,
   phaseDurationSec,
   phaseLabel,
@@ -221,4 +223,27 @@ describe("dailyIdFromAlarm", () => {
   it("parses id", () => expect(dailyIdFromAlarm(`${DAILY_ALARM_PREFIX}7`)).toBe(7));
   it("returns null for a reminder alarm", () => expect(dailyIdFromAlarm("reminder:7")).toBeNull());
   it("returns null for a non-integer suffix", () => expect(dailyIdFromAlarm("daily:1.5")).toBeNull());
+});
+
+describe("isDailyFireMissed", () => {
+  const scheduledTime = Date.parse("2026-01-01T08:00:00Z");
+
+  it("false on-time delivery (now == scheduledTime)", () => {
+    expect(isDailyFireMissed(scheduledTime, scheduledTime)).toBe(false);
+  });
+
+  it("false for a small delay within tolerance", () => {
+    const now = scheduledTime + 60_000;
+    expect(isDailyFireMissed(scheduledTime, now)).toBe(false);
+  });
+
+  it("false exactly at the tolerance boundary (strict >)", () => {
+    const now = scheduledTime + DAILY_CATCHUP_TOLERANCE_MS;
+    expect(isDailyFireMissed(scheduledTime, now)).toBe(false);
+  });
+
+  it("true well past tolerance (e.g. a 2-hour-late restart delivery)", () => {
+    const now = scheduledTime + 2 * 60 * 60 * 1000;
+    expect(isDailyFireMissed(scheduledTime, now)).toBe(true);
+  });
 });

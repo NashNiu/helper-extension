@@ -8,6 +8,7 @@ import {
   DAILY_ALARM_PREFIX,
   dailyIdFromAlarm,
   nextDailyTrigger,
+  isDailyFireMissed,
 } from "./logic";
 import { reminderApi } from "../shared/api/reminder";
 import { getActiveTimer, setActiveTimer } from "../shared/activeTimer";
@@ -96,17 +97,20 @@ async function syncDailyAlarms() {
   }
 }
 
-async function fireDaily(id: number) {
+async function fireDaily(id: number, scheduledTime: number) {
   try {
     const d = (await localDailyReminders.list()).find((x) => x.id === id);
     if (!d) return; // 已删除
-    const loc = await currentLocale();
-    // 每次到点用唯一 id:同一固定 id 会被系统当「更新」而不重弹横幅。
-    await notify(
-      `${DAILY_ALARM_PREFIX}${d.id}:${Date.now()}`,
-      translate(loc, "notify.reminderTitle"),
-      d.message,
-    );
+    // 只在准点(含小容差)时补弹;错过窗口(如浏览器重启后投递的过期闹钟)按设计只重排、不补提醒。
+    if (!isDailyFireMissed(scheduledTime, Date.now())) {
+      const loc = await currentLocale();
+      // 每次到点用唯一 id:同一固定 id 会被系统当「更新」而不重弹横幅。
+      await notify(
+        `${DAILY_ALARM_PREFIX}${d.id}:${Date.now()}`,
+        translate(loc, "notify.reminderTitle"),
+        d.message,
+      );
+    }
     // 重排次日。
     chrome.alarms.create(`${DAILY_ALARM_PREFIX}${d.id}`, {
       when: nextDailyTrigger(d.hour, d.minute, Date.now()),
@@ -157,7 +161,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
   const did = dailyIdFromAlarm(alarm.name);
   if (did !== null) {
-    void fireDaily(did);
+    void fireDaily(did, alarm.scheduledTime);
     return;
   }
   const rid = reminderIdFromAlarm(alarm.name);
