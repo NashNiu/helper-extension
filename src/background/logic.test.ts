@@ -4,6 +4,9 @@ import {
   reminderIdFromAlarm,
   remainingSeconds,
   REMINDER_ALARM_PREFIX,
+  DAILY_ALARM_PREFIX,
+  nextDailyTrigger,
+  dailyIdFromAlarm,
   isLongBreakCycle,
   phaseDurationSec,
   phaseLabel,
@@ -195,4 +198,27 @@ describe("displayRemaining", () => {
   it("awaiting returns 0", () => {
     expect(displayRemaining({ ...base, status: "awaiting" }, 0)).toBe(0);
   });
+});
+
+describe("nextDailyTrigger", () => {
+  const now = new Date(2026, 0, 1, 8, 0, 0).getTime(); // 2026-01-01 08:00 本地
+
+  it("uses today when the time is still ahead", () => {
+    const at = new Date(nextDailyTrigger(20, 0, now));
+    expect([at.getDate(), at.getHours(), at.getMinutes()]).toEqual([1, 20, 0]);
+  });
+  it("rolls to tomorrow when the time already passed", () => {
+    const at = new Date(nextDailyTrigger(7, 0, now));
+    expect([at.getDate(), at.getHours(), at.getMinutes()]).toEqual([2, 7, 0]);
+  });
+  it("treats a time exactly equal to now as tomorrow", () => {
+    const at = new Date(nextDailyTrigger(8, 0, now));
+    expect(at.getDate()).toBe(2);
+  });
+});
+
+describe("dailyIdFromAlarm", () => {
+  it("parses id", () => expect(dailyIdFromAlarm(`${DAILY_ALARM_PREFIX}7`)).toBe(7));
+  it("returns null for a reminder alarm", () => expect(dailyIdFromAlarm("reminder:7")).toBeNull());
+  it("returns null for a non-integer suffix", () => expect(dailyIdFromAlarm("daily:1.5")).toBeNull());
 });
