@@ -16,6 +16,7 @@ export const zhHant: Record<keyof typeof en, string> = {
   "quickAdd.errRateLimited": "操作太頻繁，請稍後再試",
   "quickAdd.errGeneric": "新增失敗，請稍後再試",
   "quickAdd.aiFallback": "AI 不可用，已用本機解析",
+  "quickAdd.addedDaily": "已新增每日提醒",
 
   "todo.empty": "暫無待辦",
   "todo.completeAria": "完成「{content}」",
@@ -31,6 +32,8 @@ export const zhHant: Record<keyof typeof en, string> = {
 
   "reminder.empty": "暫無待觸發的提醒",
   "reminder.pendingHeader": "待觸發的提醒",
+  "reminder.dailyHeader": "每日提醒",
+  "reminder.dailyAt": "每天 {time}",
 
   "timer.pickOne": "選擇一個計時",
   "timer.preset.pomodoro": "番茄鐘",

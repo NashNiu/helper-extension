@@ -16,6 +16,7 @@ export const zhHans: Record<keyof typeof en, string> = {
   "quickAdd.errRateLimited": "操作太频繁了，请稍后再试",
   "quickAdd.errGeneric": "没能添加成功，请稍后再试",
   "quickAdd.aiFallback": "AI 不可用，已用本地解析",
+  "quickAdd.addedDaily": "已添加每日提醒",
 
   "todo.empty": "暂无待办",
   "todo.completeAria": "完成「{content}」",
@@ -31,6 +32,8 @@ export const zhHans: Record<keyof typeof en, string> = {
 
   "reminder.empty": "暂无待触发的提醒",
   "reminder.pendingHeader": "待触发的提醒",
+  "reminder.dailyHeader": "每日提醒",
+  "reminder.dailyAt": "每天 {time}",
 
   "timer.pickOne": "选择一个计时",
   "timer.preset.pomodoro": "番茄钟",

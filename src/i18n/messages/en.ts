@@ -14,6 +14,7 @@ export const en = {
   "quickAdd.errRateLimited": "Too many requests — please try again later",
   "quickAdd.errGeneric": "Couldn't add — please try again later",
   "quickAdd.aiFallback": "AI unavailable — parsed locally",
+  "quickAdd.addedDaily": "Added daily reminder",
 
   "todo.empty": "No todos yet",
   "todo.completeAria": "Complete \"{content}\"",
@@ -29,6 +30,8 @@ export const en = {
 
   "reminder.empty": "No pending reminders",
   "reminder.pendingHeader": "Pending reminders",
+  "reminder.dailyHeader": "Daily reminders",
+  "reminder.dailyAt": "Every day at {time}",
 
   "timer.pickOne": "Pick a timer",
   "timer.preset.pomodoro": "Pomodoro",
