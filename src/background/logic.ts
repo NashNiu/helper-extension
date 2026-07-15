@@ -154,3 +154,22 @@ export const DAILY_CATCHUP_TOLERANCE_MS = 5 * 60_000;
 export function isDailyFireMissed(scheduledTime: number, now: number): boolean {
   return now - scheduledTime > DAILY_CATCHUP_TOLERANCE_MS;
 }
+
+// 规划需要新建的每日闹钟:只为「当前没有闹钟」的提醒补建,绝不动已存在的。
+// 关键——重建会用 nextDailyTrigger 把一个刚到点、正等待投递的闹钟改排到明天,
+// 从而取消今天的触发(心跳与到点闹钟常在同一批被唤醒,心跳先跑就会顶掉它)。
+// 已存在的闹钟要么在未来(没问题),要么正待投递(必须留着让它触发,fireDaily 会重排次日)。
+export function planDailyAlarms(
+  reminders: { id: number; hour: number; minute: number }[],
+  existingNames: string[],
+  now: number,
+): { name: string; when: number }[] {
+  const has = new Set(existingNames);
+  const toCreate: { name: string; when: number }[] = [];
+  for (const d of reminders) {
+    const name = `${DAILY_ALARM_PREFIX}${d.id}`;
+    if (has.has(name)) continue;
+    toCreate.push({ name, when: nextDailyTrigger(d.hour, d.minute, now) });
+  }
+  return toCreate;
+}
