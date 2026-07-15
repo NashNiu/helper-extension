@@ -9,6 +9,7 @@ import {
   dailyIdFromAlarm,
   isDailyFireMissed,
   DAILY_CATCHUP_TOLERANCE_MS,
+  planDailyAlarms,
   isLongBreakCycle,
   phaseDurationSec,
   phaseLabel,
@@ -245,5 +246,38 @@ describe("isDailyFireMissed", () => {
   it("true well past tolerance (e.g. a 2-hour-late restart delivery)", () => {
     const now = scheduledTime + 2 * 60 * 60 * 1000;
     expect(isDailyFireMissed(scheduledTime, now)).toBe(true);
+  });
+});
+
+describe("planDailyAlarms", () => {
+  const now = new Date(2026, 0, 1, 8, 0, 0).getTime();
+  const reminders = [
+    { id: 1, hour: 20, minute: 0 },
+    { id: 2, hour: 7, minute: 30 },
+  ];
+
+  it("creates an alarm for every reminder when none exist yet", () => {
+    expect(planDailyAlarms(reminders, [], now)).toEqual([
+      { name: `${DAILY_ALARM_PREFIX}1`, when: nextDailyTrigger(20, 0, now) },
+      { name: `${DAILY_ALARM_PREFIX}2`, when: nextDailyTrigger(7, 30, now) },
+    ]);
+  });
+
+  it("never recreates an alarm that already exists (must not clobber a pending fire)", () => {
+    // 回归:心跳重排若顶掉一个刚到点、正待投递的 daily:1,今天就不会触发。
+    const out = planDailyAlarms(reminders, [`${DAILY_ALARM_PREFIX}1`], now);
+    expect(out).toEqual([{ name: `${DAILY_ALARM_PREFIX}2`, when: nextDailyTrigger(7, 30, now) }]);
+  });
+
+  it("returns nothing when all reminders already have alarms", () => {
+    const existing = [`${DAILY_ALARM_PREFIX}1`, `${DAILY_ALARM_PREFIX}2`];
+    expect(planDailyAlarms(reminders, existing, now)).toEqual([]);
+  });
+
+  it("ignores unrelated alarm names when deciding what is missing", () => {
+    const existing = ["heartbeat", "timer:done", `${DAILY_ALARM_PREFIX}2`];
+    expect(planDailyAlarms(reminders, existing, now)).toEqual([
+      { name: `${DAILY_ALARM_PREFIX}1`, when: nextDailyTrigger(20, 0, now) },
+    ]);
   });
 });

@@ -9,6 +9,7 @@ import {
   dailyIdFromAlarm,
   nextDailyTrigger,
   isDailyFireMissed,
+  planDailyAlarms,
 } from "./logic";
 import { reminderApi } from "../shared/api/reminder";
 import { getActiveTimer, setActiveTimer } from "../shared/activeTimer";
@@ -83,14 +84,16 @@ async function runHeartbeat() {
   }
 }
 
-// 为每个每日提醒(重)排下一次到点闹钟;幂等,同名覆盖。
+// 自愈式补排:只为「当前没有闹钟」的每日提醒新建闹钟,绝不重建已存在的。
+// 不能无条件重排——那会把一个刚到点、正待投递的闹钟顶到明天(心跳与到点闹钟常在
+// 同一批唤醒,心跳先跑就会取消今天的触发),导致每日提醒永远不响。
 async function syncDailyAlarms() {
   try {
     const list = await localDailyReminders.list();
-    for (const d of list) {
-      chrome.alarms.create(`${DAILY_ALARM_PREFIX}${d.id}`, {
-        when: nextDailyTrigger(d.hour, d.minute, Date.now()),
-      });
+    const existing = await chrome.alarms.getAll();
+    const toCreate = planDailyAlarms(list, existing.map((a) => a.name), Date.now());
+    for (const s of toCreate) {
+      chrome.alarms.create(s.name, { when: s.when });
     }
   } catch (e) {
     console.error("syncDailyAlarms failed", e);
