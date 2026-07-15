@@ -5,6 +5,10 @@ import {
   planReminders,
   reminderIdFromAlarm,
   nextStep,
+  DAILY_ALARM_PREFIX,
+  dailyIdFromAlarm,
+  nextDailyTrigger,
+  isDailyFireMissed,
 } from "./logic";
 import { reminderApi } from "../shared/api/reminder";
 import { getActiveTimer, setActiveTimer } from "../shared/activeTimer";
@@ -12,6 +16,7 @@ import { translate } from "../i18n/core";
 import { currentLocale } from "../shared/locale";
 import { initClipboard } from "./clipboard";
 import { storageGet, storageSet } from "../shared/storage";
+import { localDailyReminders } from "../shared/local/dailyReminders";
 
 const ICON = "icon-128.png";
 // 记住回退弹窗的窗口 id:再次点通知时优先聚焦它,避免每次新建导致窗口越攒越多。
@@ -25,11 +30,13 @@ chrome.runtime.onInstalled.addListener(() => {
     .catch((e) => console.error(e));
   chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 });
   void initClipboard();
+  void syncDailyAlarms();
 });
 
 chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 });
   void initClipboard();
+  void syncDailyAlarms();
 });
 
 async function notify(id: string, title: string, message: string) {
@@ -70,8 +77,46 @@ async function runHeartbeat() {
     for (const s of toSchedule) {
       chrome.alarms.create(s.name, { when: s.when });
     }
+    await syncDailyAlarms();
   } catch (e) {
     console.error("heartbeat failed", e);
+  }
+}
+
+// 为每个每日提醒(重)排下一次到点闹钟;幂等,同名覆盖。
+async function syncDailyAlarms() {
+  try {
+    const list = await localDailyReminders.list();
+    for (const d of list) {
+      chrome.alarms.create(`${DAILY_ALARM_PREFIX}${d.id}`, {
+        when: nextDailyTrigger(d.hour, d.minute, Date.now()),
+      });
+    }
+  } catch (e) {
+    console.error("syncDailyAlarms failed", e);
+  }
+}
+
+async function fireDaily(id: number, scheduledTime: number) {
+  try {
+    const d = (await localDailyReminders.list()).find((x) => x.id === id);
+    if (!d) return; // 已删除
+    // 只在准点(含小容差)时补弹;错过窗口(如浏览器重启后投递的过期闹钟)按设计只重排、不补提醒。
+    if (!isDailyFireMissed(scheduledTime, Date.now())) {
+      const loc = await currentLocale();
+      // 每次到点用唯一 id:同一固定 id 会被系统当「更新」而不重弹横幅。
+      await notify(
+        `${DAILY_ALARM_PREFIX}${d.id}:${Date.now()}`,
+        translate(loc, "notify.reminderTitle"),
+        d.message,
+      );
+    }
+    // 重排次日。
+    chrome.alarms.create(`${DAILY_ALARM_PREFIX}${d.id}`, {
+      when: nextDailyTrigger(d.hour, d.minute, Date.now()),
+    });
+  } catch (e) {
+    console.error("fireDaily failed", e);
   }
 }
 
@@ -112,6 +157,11 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
   if (alarm.name === TIMER_ALARM) {
     void fireTimerDone();
+    return;
+  }
+  const did = dailyIdFromAlarm(alarm.name);
+  if (did !== null) {
+    void fireDaily(did, alarm.scheduledTime);
     return;
   }
   const rid = reminderIdFromAlarm(alarm.name);
