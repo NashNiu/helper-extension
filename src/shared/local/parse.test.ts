@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { zhToNum, parseDuration, parseTimer, parseClock, parseReminderTime, parseReminder, classify } from "./parse";
+import { zhToNum, parseDuration, parseTimer, parseClock, parseReminderTime, parseReminder, classify, parseDailyReminder } from "./parse";
 
 describe("zhToNum", () => {
   it("parses arabic digits", () => {
@@ -249,5 +249,26 @@ describe("English collision & mixed-language guards", () => {
   it("still parses full English weekday names", () => {
     expect(parseReminderTime("next monday", NOW)!.getDate()).toBe(5);
     expect(parseReminderTime("friday 10am", NOW)!.getDate()).toBe(2);
+  });
+});
+
+describe("parseDailyReminder", () => {
+  it("parses a daily reminder with a bare hour (literal 24h)", () => {
+    expect(parseDailyReminder("每天8点提醒我喝水")).toEqual({ message: "喝水", hour: 8, minute: 0 });
+  });
+  it("maps 每晚 to evening", () => {
+    expect(parseDailyReminder("每晚10点吃药")).toEqual({ message: "吃药", hour: 22, minute: 0 });
+  });
+  it("maps 每日早上 to morning", () => {
+    expect(parseDailyReminder("每日早上7点晨跑")).toEqual({ message: "晨跑", hour: 7, minute: 0 });
+  });
+  it("parses colon form", () => {
+    expect(parseDailyReminder("每天21:30提醒我复盘")).toEqual({ message: "复盘", hour: 21, minute: 30 });
+  });
+  it("returns null without a clock", () => {
+    expect(parseDailyReminder("每天喝水")).toBeNull();
+  });
+  it("returns null without a daily cue", () => {
+    expect(parseDailyReminder("8点开会")).toBeNull();
   });
 });

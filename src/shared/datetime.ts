@@ -5,3 +5,8 @@ export function formatDateTime(iso: string): string {
     d.getMinutes(),
   )}`;
 }
+
+export function formatHourMinute(hour: number, minute: number): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(hour)}:${p(minute)}`;
+}

@@ -8,6 +8,8 @@ import { makeLocalQuickAddDeps } from "../shared/local/localQuickAdd";
 import { makeByokQuickAddDeps } from "../shared/ai/byokQuickAdd";
 import { getKey, DEEPSEEK_KEY_STORAGE_KEY } from "../shared/ai/apiKey";
 import { routeQuickAdd, routeQuickAddWithFallback, type QuickAddDeps } from "./quickAdd";
+import { parseDailyReminder } from "../shared/local/parse";
+import { localDailyReminders } from "../shared/local/dailyReminders";
 
 type HintKind = "ok" | "warn" | "error";
 
@@ -81,6 +83,17 @@ export function QuickAddBar({ onAdded }: { onAdded: () => void }) {
     setBusy(true);
     setHint("");
     try {
+      // 「每天/每晚/每日 + 时刻」是确定性规则,前置识别,BYOK/本地一致,且无需 AI。
+      const daily = parseDailyReminder(input);
+      if (daily) {
+        await localDailyReminders.create(daily);
+        setText("");
+        setHintKind("ok");
+        setHint(t("quickAdd.addedDaily"));
+        onAdded();
+        return;
+      }
+
       const { handled, usedFallback } = aiDeps
         ? await routeQuickAddWithFallback(input, aiDeps, localDeps)
         : { handled: await routeQuickAdd(input, localDeps), usedFallback: false };
