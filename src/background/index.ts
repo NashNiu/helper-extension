@@ -9,6 +9,7 @@ import {
   dailyIdFromAlarm,
   nextDailyTrigger,
   isDailyFireMissed,
+  planDailyAlarms,
 } from "./logic";
 import { reminderApi } from "../shared/api/reminder";
 import { getActiveTimer, setActiveTimer } from "../shared/activeTimer";
@@ -83,14 +84,23 @@ async function runHeartbeat() {
   }
 }
 
-// 为每个每日提醒(重)排下一次到点闹钟;幂等,同名覆盖。
+// 自愈式补排:只为「当前没有闹钟」的每日提醒新建闹钟,绝不重建已存在的。
+// 不能无条件重排——那会把一个刚到点、正待投递的闹钟顶到明天(心跳与到点闹钟常在
+// 同一批唤醒,心跳先跑就会取消今天的触发),导致每日提醒永远不响。
 async function syncDailyAlarms() {
   try {
     const list = await localDailyReminders.list();
-    for (const d of list) {
-      chrome.alarms.create(`${DAILY_ALARM_PREFIX}${d.id}`, {
-        when: nextDailyTrigger(d.hour, d.minute, Date.now()),
-      });
+    const existing = await chrome.alarms.getAll();
+    console.log(
+      "[daily-debug] syncDailyAlarms: reminders=",
+      JSON.stringify(list),
+      "existingAlarms=",
+      existing.map((a) => `${a.name}@${new Date(a.scheduledTime).toISOString()}`),
+    );
+    const toCreate = planDailyAlarms(list, existing.map((a) => a.name), Date.now());
+    console.log("[daily-debug] syncDailyAlarms: creating=", toCreate.map((s) => `${s.name}@${new Date(s.when).toISOString()}`));
+    for (const s of toCreate) {
+      chrome.alarms.create(s.name, { when: s.when });
     }
   } catch (e) {
     console.error("syncDailyAlarms failed", e);
@@ -98,23 +108,35 @@ async function syncDailyAlarms() {
 }
 
 async function fireDaily(id: number, scheduledTime: number) {
+  console.log("[daily-debug] fireDaily: id=", id, "scheduledTime=", new Date(scheduledTime).toISOString(), "now=", new Date().toISOString());
   try {
     const d = (await localDailyReminders.list()).find((x) => x.id === id);
-    if (!d) return; // 已删除
+    if (!d) {
+      console.log("[daily-debug] fireDaily: reminder not found in store, aborting");
+      return; // 已删除
+    }
     // 只在准点(含小容差)时补弹;错过窗口(如浏览器重启后投递的过期闹钟)按设计只重排、不补提醒。
-    if (!isDailyFireMissed(scheduledTime, Date.now())) {
+    const missed = isDailyFireMissed(scheduledTime, Date.now());
+    console.log("[daily-debug] fireDaily: found reminder, missed=", missed);
+    if (!missed) {
       const loc = await currentLocale();
       // 每次到点用唯一 id:同一固定 id 会被系统当「更新」而不重弹横幅。
-      await notify(
-        `${DAILY_ALARM_PREFIX}${d.id}:${Date.now()}`,
-        translate(loc, "notify.reminderTitle"),
-        d.message,
-      );
+      try {
+        await notify(
+          `${DAILY_ALARM_PREFIX}${d.id}:${Date.now()}`,
+          translate(loc, "notify.reminderTitle"),
+          d.message,
+        );
+        console.log("[daily-debug] fireDaily: notify() resolved OK");
+      } catch (e) {
+        console.error("[daily-debug] fireDaily: notify() FAILED", e);
+      }
     }
     // 重排次日。
     chrome.alarms.create(`${DAILY_ALARM_PREFIX}${d.id}`, {
       when: nextDailyTrigger(d.hour, d.minute, Date.now()),
     });
+    console.log("[daily-debug] fireDaily: rescheduled");
   } catch (e) {
     console.error("fireDaily failed", e);
   }
@@ -151,6 +173,7 @@ async function fireTimerDone() {
 }
 
 chrome.alarms.onAlarm.addListener((alarm) => {
+  console.log("[daily-debug] onAlarm fired: name=", alarm.name, "scheduledTime=", new Date(alarm.scheduledTime).toISOString(), "now=", new Date().toISOString());
   if (alarm.name === HEARTBEAT_ALARM) {
     void runHeartbeat();
     return;
