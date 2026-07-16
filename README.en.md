@@ -19,7 +19,8 @@ A Chrome Side Panel extension: capture reminders, timers, todos, and clipboard s
 | Feature | Description |
 |---------|-------------|
 | Todo | Task list with pagination + infinite scroll |
-| Reminders | System notification on due; fired by background alarms |
+| Reminders | One-off reminders with a system notification on due; fired by background alarms |
+| Daily reminders | Create repeating reminders in natural language (e.g. "每天8点提醒我喝水" / "every day at 8am…"), notified at that time each day until deleted; managed in a dedicated section atop the Reminders tab |
 | Timer | Classic pomodoro cycles (work/break, long break every 4th), pause/resume/reset, estimated end, floating widget |
 | Clipboard | Save text/images, pin & search; right-click "save image", one-click "add from clipboard" in the panel |
 | Quick add | Natural-language input in the top bar. Default **local rule-based parsing** (Chinese + English, offline, zero backend) auto-routes to reminder / timer / todo; with your own **DeepSeek key** it switches to AI parsing (auto-falls back to local on failure) |
@@ -67,7 +68,7 @@ npm run build
 
 ```
 src/
-  background/     # Service worker: chrome.alarms heartbeat/reminder/timer alarms, notifications, clipboard, pure logic (unit-tested)
+  background/     # Service worker: chrome.alarms heartbeat/reminder/daily/timer alarms, notifications, clipboard, pure logic (unit-tested)
   panel/          # Side panel entry App, "Mine" settings page
   features/       # Feature views: todo / reminder / timer (incl. TimerWidget) / clipboard, quick add
   components/     # Shared components (Button, TabBar, etc.)
@@ -86,6 +87,7 @@ Quick-add parsing is done by the extension's embedded **local rule-based parser*
 ### Background scheduling
 
 - `chrome.alarms` heartbeat every minute re-schedules/fires due reminders (`reminder:{id}`).
+- **Daily reminders** (`daily:{id}`): login-independent local repeating reminders stored in `chrome.storage.local`; after firing, the next day's alarm is re-scheduled automatically. They fire only while the browser is running (a missed day is skipped, no catch-up). The heartbeat only fills in *missing* daily alarms and never re-schedules an imminent one.
 - The timer alarm `timer:done` fires: a pomodoro session enters an "awaiting" state and notifies (manual advance to the next phase); a one-shot timer notifies and clears.
 - Clicking any notification opens the side panel.
 
