@@ -32,7 +32,7 @@ export default defineManifest({
   ],
   permissions: ["sidePanel", "alarms", "notifications", "storage", "unlimitedStorage", "contextMenus", "clipboardWrite", "clipboardRead"],
   host_permissions: [
-    "https://helper-backend-production-6abe.up.railway.app/*",
+    "https://helper-backend-sigma.vercel.app/*",
     "https://api.deepseek.com/*",
   ],
 });
