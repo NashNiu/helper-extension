@@ -3,7 +3,6 @@ import { AiError } from "./deepseek";
 
 const analyzeMock = vi.fn();
 const createManual = vi.fn(async () => {});
-const startTimer = vi.fn(async () => {});
 const todoCreate = vi.fn(async () => {});
 
 vi.mock("./deepseek", async () => {
@@ -11,7 +10,6 @@ vi.mock("./deepseek", async () => {
   return { ...actual, analyzeWithDeepseek: (...args: any[]) => (analyzeMock as any)(...args) };
 });
 vi.mock("../api/reminder", () => ({ reminderApi: { createManual: (...args: any[]) => (createManual as any)(...args) } }));
-vi.mock("../timerControl", () => ({ startTimer: (...args: any[]) => (startTimer as any)(...args) }));
 vi.mock("../api/todo", () => ({ todoApi: { create: (...args: any[]) => (todoCreate as any)(...args) } }));
 
 import { makeByokQuickAddDeps } from "./byokQuickAdd";
@@ -20,7 +18,7 @@ const NOW = new Date(2026, 0, 1, 8, 0, 0);
 const now = () => NOW;
 
 describe("makeByokQuickAddDeps", () => {
-  beforeEach(() => { analyzeMock.mockReset(); createManual.mockReset(); startTimer.mockReset(); todoCreate.mockReset(); });
+  beforeEach(() => { analyzeMock.mockReset(); createManual.mockReset(); todoCreate.mockReset(); });
 
   it("calls the AI once per input and routes items to local writers", async () => {
     analyzeMock.mockResolvedValue([
@@ -35,14 +33,6 @@ describe("makeByokQuickAddDeps", () => {
     expect(analyzeMock).toHaveBeenCalledTimes(1);
     expect(createManual).toHaveBeenCalledWith({ message: "交房租", trigger_at: "2026-07-08T01:00:00.000Z" });
     expect(todoCreate).toHaveBeenCalledWith("买菜");
-  });
-
-  it("routes a timer item to startTimer", async () => {
-    analyzeMock.mockResolvedValue([{ type: "timer", name: "复习", duration_seconds: 1500 }]);
-    const deps = makeByokQuickAddDeps("k", now);
-    await deps.classify("复习计时25分钟");
-    await deps.createTimer("复习计时25分钟");
-    expect(startTimer).toHaveBeenCalledWith(0, "复习", 1500);
   });
 
   it("propagates AiError from classify", async () => {

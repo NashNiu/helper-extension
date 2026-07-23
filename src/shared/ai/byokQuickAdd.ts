@@ -2,7 +2,6 @@ import type { QuickAddDeps } from "../../features/quickAdd";
 import type { AssistantType } from "../api/classify";
 import { analyzeWithDeepseek, type AnalyzedItem } from "./deepseek";
 import { reminderApi } from "../api/reminder";
-import { startTimer } from "../timerControl";
 import { todoApi } from "../api/todo";
 
 /**
@@ -32,11 +31,6 @@ export function makeByokQuickAddDeps(
       if (it && it.type === "reminder") {
         await reminderApi.createManual({ message: it.message, trigger_at: it.trigger_at });
       }
-    },
-    createTimer: async (input: string) => {
-      const items = await ensure(input);
-      const it = items.find((x) => x.type === "timer");
-      if (it && it.type === "timer") await startTimer(0, it.name, it.duration_seconds);
     },
     createTodo: async (input: string) => {
       const items = await ensure(input);

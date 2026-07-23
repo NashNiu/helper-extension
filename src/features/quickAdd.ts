@@ -4,7 +4,6 @@ import { AiError } from "../shared/ai/deepseek";
 export interface QuickAddDeps {
   classify: (input: string) => Promise<{ types: AssistantType[] }>;
   createReminder: (input: string) => Promise<unknown>;
-  createTimer: (input: string) => Promise<unknown>;
   createTodo: (content: string) => Promise<unknown>;
 }
 
@@ -18,14 +17,11 @@ export async function routeQuickAdd(
     if (t === "reminder") {
       await deps.createReminder(input);
       handled.push(t);
-    } else if (t === "timer") {
-      await deps.createTimer(input);
-      handled.push(t);
     } else if (t === "todo") {
       await deps.createTodo(input);
       handled.push(t);
     }
-    // finance 忽略
+    // timer / finance 忽略:一句话添加只产生提醒或待办
   }
   return handled;
 }

@@ -11,7 +11,6 @@ export class AiError extends Error {
 
 export type AnalyzedItem =
   | { type: "reminder"; message: string; trigger_at: string }
-  | { type: "timer"; name: string; duration_seconds: number }
   | { type: "todo"; content: string };
 
 export type KeyStatus = "valid" | "invalid" | "network_error";
@@ -41,9 +40,8 @@ function systemPrompt(now: Date): string {
     `当前时间: ${localIsoWithOffset(now)}。相对时间(如"明天9点""25分钟后")据此换算成绝对时间。`,
     '只输出 JSON,形如 {"items":[...]}。每个 item 为下列之一:',
     '{"type":"reminder","message":"提醒正文(去掉时间词)","trigger_at":"带时区的ISO8601,如 2026-07-08T09:00:00+08:00,须晚于当前时间"}',
-    '{"type":"timer","name":"计时名(默认 计时)","duration_seconds":正整数秒}',
     '{"type":"todo","content":"待办文本"}',
-    '无法识别为提醒或计时的内容作为 todo。没有任何意图时输出 {"items":[]}。除 JSON 外不要输出任何文字。',
+    '无法识别为提醒的内容作为 todo。没有任何意图时输出 {"items":[]}。除 JSON 外不要输出任何文字。',
   ].join("\n");
 }
 
@@ -73,13 +71,6 @@ function coerceItems(raw: unknown, now: Date): AnalyzedItem[] {
       if (isNaN(d.getTime()) || d.getTime() <= now.getTime()) continue;
       seen.add("reminder");
       out.push({ type: "reminder", message: o.message.trim(), trigger_at: d.toISOString() });
-    } else if (o.type === "timer") {
-      if (seen.has("timer")) continue;
-      const secs = typeof o.duration_seconds === "number" ? Math.round(o.duration_seconds) : NaN;
-      if (!Number.isFinite(secs) || secs <= 0) continue;
-      seen.add("timer");
-      const name = typeof o.name === "string" && o.name.trim() ? o.name.trim() : "计时";
-      out.push({ type: "timer", name, duration_seconds: secs });
     } else if (o.type === "todo") {
       if (seen.has("todo")) continue;
       if (typeof o.content !== "string" || !o.content.trim()) continue;
