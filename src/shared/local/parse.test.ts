@@ -168,9 +168,11 @@ describe("parseReminder", () => {
 });
 
 describe("classify", () => {
-  it("classifies timer", () => {
-    expect(classify("计时25分钟", NOW)).toEqual({ types: ["timer"] });
-    expect(classify("番茄钟", NOW)).toEqual({ types: ["timer"] });
+  it("no longer classifies timer — timer-cue phrases without a time become todo", () => {
+    // 一句话添加已取消计时:含计时词但无可解析时间的句子归为待办。
+    expect(classify("计时25分钟", NOW)).toEqual({ types: ["todo"] });
+    expect(classify("番茄钟", NOW)).toEqual({ types: ["todo"] });
+    expect(classify("专注25分钟", NOW)).toEqual({ types: ["todo"] });
   });
   it("classifies reminder", () => {
     expect(classify("明天九点开会", NOW)).toEqual({ types: ["reminder"] });
@@ -215,8 +217,9 @@ describe("English integration via parse.ts entry points", () => {
     expect(new Date(r.trigger_at).getHours()).toBe(20);
     expect(r.message).toBe("to take meds");
   });
-  it("classifies an English timer", () => {
-    expect(classify("timer 25 min", NOW)).toEqual({ types: ["timer"] });
+  it("no longer classifies an English timer phrase as timer (becomes todo)", () => {
+    expect(classify("timer 25 min", NOW)).toEqual({ types: ["todo"] });
+    // parseTimer 本身仍是可用的纯工具函数,只是不再被一句话添加使用。
     expect(parseTimer("timer 25 min")).toEqual({ name: "Timer", duration_seconds: 1500 });
   });
   it("parses English relative/named/weekday/absolute times", () => {

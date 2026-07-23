@@ -41,12 +41,14 @@ describe("analyzeWithDeepseek", () => {
     expect(items).toEqual([{ type: "todo", content: "a" }]);
   });
 
-  it("drops invalid items (past reminder, non-positive duration)", async () => {
+  it("drops invalid items (past reminder, blank todo) and unknown types (e.g. timer)", async () => {
     const items = await analyzeWithDeepseek(
       "x", NOW, "k",
       fetchOk({ items: [
         { type: "reminder", message: "past", trigger_at: "2020-01-01T00:00:00+08:00" },
-        { type: "timer", name: "t", duration_seconds: 0 },
+        { type: "todo", content: "   " },
+        // timer 已从一句话添加移除 → 视为未知类型,被丢弃
+        { type: "timer", name: "t", duration_seconds: 1500 },
       ] }),
     );
     expect(items).toEqual([]);

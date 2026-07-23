@@ -7,7 +7,6 @@ import {
   tryAbsoluteEn,
   cleanReminderMessageEn,
   hasEnDateAnchorEn,
-  EN_TIMER_CUE,
 } from "./parseEn";
 
 export type AssistantType = "reminder" | "timer" | "todo";
@@ -320,10 +319,8 @@ export function parseDailyReminder(input: string): ParsedDailyReminder | null {
   return { message, hour: clock.hour, minute: clock.minute };
 }
 
-/** 归类:timer / reminder / todo(只返回单一类型;歧义归 todo)。 */
+/** 归类:reminder / todo(只返回单一类型;无可解析时间即归 todo)。一句话添加不再产生计时。 */
 export function classify(input: string, now: Date): { types: AssistantType[] } {
-  const timerCue = /计时|計時|倒计时|倒計時|番茄|蕃茄|专注|專注|定时|定時/.test(input) || EN_TIMER_CUE.test(input);
-  if (timerCue && parseTimer(input)) return { types: ["timer"] };
   if (parseReminderTime(input, now)) return { types: ["reminder"] };
   return { types: ["todo"] };
 }

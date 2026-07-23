@@ -1,11 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("../api/reminder", () => ({ reminderApi: { createManual: vi.fn(async () => {}) } }));
-vi.mock("../timerControl", () => ({ startTimer: vi.fn(async () => {}) }));
 vi.mock("../api/todo", () => ({ todoApi: { create: vi.fn(async () => {}) } }));
 
 import { reminderApi } from "../api/reminder";
-import { startTimer } from "../timerControl";
 import { todoApi } from "../api/todo";
 import { makeLocalQuickAddDeps } from "./localQuickAdd";
 
@@ -24,10 +22,6 @@ describe("makeLocalQuickAddDeps", () => {
     const arg = (reminderApi.createManual as any).mock.calls[0][0];
     expect(arg.message).toBe("开会");
     expect(new Date(arg.trigger_at).getHours()).toBe(9);
-  });
-  it("starts a local timer", async () => {
-    await deps.createTimer("计时25分钟");
-    expect(startTimer).toHaveBeenCalledWith(0, "计时", 1500);
   });
   it("falls back unparseable reminder text to a todo", async () => {
     await deps.createReminder("买牛奶");
