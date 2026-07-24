@@ -68,7 +68,7 @@ export const zhHant: Record<keyof typeof en, string> = {
   "timer.resume": "繼續",
   "timer.resetPhase": "重設本階段",
   "timer.reset": "重設",
-  "timer.endPomodoro": "結束番茄鐘",
+  "timer.endMethod": "結束{name}",
   "timer.paused": "已暫停",
   "timer.hintSession": "切換到其他頁面時計時繼續，到點後等待確認。",
   "timer.hintOneShot": "切換到其他頁面時計時繼續，到點會有系統通知。",

@@ -66,7 +66,7 @@ export const en = {
   "timer.resume": "Resume",
   "timer.resetPhase": "Reset phase",
   "timer.reset": "Reset",
-  "timer.endPomodoro": "End pomodoro",
+  "timer.endMethod": "End {name}",
   "timer.paused": "Paused",
   "timer.hintSession": "Timing continues on other tabs; you'll confirm when it's up.",
   "timer.hintOneShot": "Timing continues on other tabs; you'll get a system notification.",

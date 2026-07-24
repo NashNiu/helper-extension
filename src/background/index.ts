@@ -155,7 +155,9 @@ async function fireTimerDone() {
       await notify(
         nid,
         translate(loc, "notify.breakTitle"),
-        translate(loc, "notify.breakBody", { name: translate(loc, "timer.preset.pomodoro") }),
+        translate(loc, "notify.breakBody", {
+          name: translate(loc, t.timerId === -4 ? "timer.preset.rule5217" : "timer.preset.pomodoro"),
+        }),
       );
     } else {
       const finished = nextStep(t.session).done;

@@ -68,7 +68,7 @@ export const zhHans: Record<keyof typeof en, string> = {
   "timer.resume": "继续",
   "timer.resetPhase": "重置本阶段",
   "timer.reset": "重置",
-  "timer.endPomodoro": "结束番茄钟",
+  "timer.endMethod": "结束{name}",
   "timer.paused": "已暂停",
   "timer.hintSession": "切换到其他页面时计时继续，到点后等待确认。",
   "timer.hintOneShot": "切换到其他页面时计时继续，到点会有系统通知。",
