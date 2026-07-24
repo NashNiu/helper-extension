@@ -185,8 +185,9 @@ export function TimerView({ refreshKey }: { refreshKey: number }) {
       const phaseColor = isWork ? "text-ink" : "text-accent";
 
       const finished = awaiting && !isWork && nextStep(session).done;
-      const longNext = isLongBreakCycle(session.cycleIndex);
+      const longNext = isLongBreakCycle(session.cycleIndex, session.longBreakEvery ?? 4);
       const breakMin = Math.round((longNext ? session.longBreakSec : session.shortBreakSec) / 60);
+      const methodName = t(timer.timerId === -4 ? "timer.preset.rule5217" : "timer.preset.pomodoro");
       const advanceLabel = isWork
         ? t(longNext ? "timer.startLongBreak" : "timer.startBreak", { min: breakMin })
         : t("timer.startNextRound", { n: session.cycleIndex + 1 });
@@ -235,7 +236,7 @@ export function TimerView({ refreshKey }: { refreshKey: number }) {
                 {advanceLabel}
               </Button>
               <Button variant="ghost" onClick={onCancel}>
-                {t("timer.endPomodoro")}
+                {t("timer.endMethod", { name: methodName })}
               </Button>
             </div>
           ) : (
@@ -250,7 +251,7 @@ export function TimerView({ refreshKey }: { refreshKey: number }) {
                 {t("timer.resetPhase")}
               </Button>
               <Button variant="danger" className={dangerOutlineBtn} onClick={onCancel}>
-                {t("timer.endPomodoro")}
+                {t("timer.endMethod", { name: methodName })}
               </Button>
             </div>
           )}
