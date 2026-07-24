@@ -94,6 +94,14 @@ describe("isLongBreakCycle", () => {
     expect(isLongBreakCycle(3)).toBe(false);
     expect(isLongBreakCycle(5)).toBe(false);
   });
+  it("honors a custom interval", () => {
+    expect(isLongBreakCycle(3, 3)).toBe(true);
+    expect(isLongBreakCycle(4, 3)).toBe(false);
+  });
+  it("never long-breaks when every is 0 (e.g. 52/17 rule)", () => {
+    expect(isLongBreakCycle(4, 0)).toBe(false);
+    expect(isLongBreakCycle(8, 0)).toBe(false);
+  });
 });
 
 describe("plannedTotalSeconds", () => {
@@ -131,6 +139,10 @@ describe("nextStep", () => {
   it("work → long break (4th cycle)", () => {
     const out = nextStep(sess({ cycleIndex: 4, phase: "work" }));
     expect(out.phase).toBe("long_break");
+  });
+  it("work → short break on 4th cycle when longBreakEvery is 0 (52/17 rule)", () => {
+    const out = nextStep(sess({ cycleIndex: 4, phase: "work", longBreakEvery: 0 }));
+    expect(out.phase).toBe("short_break");
   });
   it("break → next work when cycles remain", () => {
     const out = nextStep(sess({ cycles: 4, cycleIndex: 1, phase: "short_break" }));
