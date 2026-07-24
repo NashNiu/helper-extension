@@ -41,6 +41,7 @@ export interface PomodoroSession {
   workSec: number;
   shortBreakSec: number;
   longBreakSec: number;
+  longBreakEvery?: number; // 每几个循环一次长休息(默认 4);0 表示无长休息(如 52/17 法则)
 }
 
 export interface ActiveTimer {
@@ -53,8 +54,9 @@ export interface ActiveTimer {
   session?: PomodoroSession;  // 有则为番茄钟会话,无则为一次性计时
 }
 
-export function isLongBreakCycle(cycleIndex: number): boolean {
-  return cycleIndex % 4 === 0;
+// 该循环后是否进入长休息:every>0 时每 every 个循环一次;every=0 表示没有长休息(如 52/17)。
+export function isLongBreakCycle(cycleIndex: number, every = 4): boolean {
+  return every > 0 && cycleIndex % every === 0;
 }
 
 // 一轮完整会话的总时长(秒):N 个工作段 + 每段后的休息(每 4 轮长休息,尾部休息保留)。
@@ -92,7 +94,9 @@ export interface NextStep {
 // 计算「用户点下一步」后的下一阶段。
 export function nextStep(session: PomodoroSession): NextStep {
   if (session.phase === "work") {
-    const phase: Phase = isLongBreakCycle(session.cycleIndex) ? "long_break" : "short_break";
+    const phase: Phase = isLongBreakCycle(session.cycleIndex, session.longBreakEvery ?? 4)
+      ? "long_break"
+      : "short_break";
     return { done: false, phase, session: { ...session, phase } };
   }
   // 当前是休息

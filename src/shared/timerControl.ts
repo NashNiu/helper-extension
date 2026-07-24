@@ -37,8 +37,19 @@ export async function startTimer(
   setTimerAlarm(startAt + durationSeconds * 1000);
 }
 
-/** 启动番茄钟循环会话:第 1 个工作段立即运行。 */
-export async function startPomodoro(workTimer: Timer, cycles: number): Promise<void> {
+/** 番茄钟类循环会话的休息配置;缺省即经典番茄钟(5/15,每 4 轮长休息)。 */
+export interface FocusBreakOpts {
+  shortBreakSec?: number;
+  longBreakSec?: number;
+  longBreakEvery?: number; // 0 = 无长休息(如 52/17 法则)
+}
+
+/** 启动番茄钟类循环会话:第 1 个工作段立即运行。 */
+export async function startPomodoro(
+  workTimer: Timer,
+  cycles: number,
+  opts: FocusBreakOpts = {},
+): Promise<void> {
   const n = Math.min(12, Math.max(1, Math.round(cycles) || 1));
   const startAt = Date.now();
   const session: PomodoroSession = {
@@ -46,8 +57,9 @@ export async function startPomodoro(workTimer: Timer, cycles: number): Promise<v
     cycleIndex: 1,
     phase: "work",
     workSec: workTimer.duration_seconds,
-    shortBreakSec: SHORT_BREAK_SEC,
-    longBreakSec: LONG_BREAK_SEC,
+    shortBreakSec: opts.shortBreakSec ?? SHORT_BREAK_SEC,
+    longBreakSec: opts.longBreakSec ?? LONG_BREAK_SEC,
+    longBreakEvery: opts.longBreakEvery ?? 4,
   };
   await setActiveTimer({
     timerId: workTimer.id,
