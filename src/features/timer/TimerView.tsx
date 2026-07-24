@@ -47,6 +47,55 @@ const outlineBtn = "border border-line";
 const accentOutlineBtn = "border border-accent/40 text-accent";
 const dangerOutlineBtn = "border border-danger/40";
 
+const svgProps = {
+  width: 28,
+  height: 28,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.8,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+  "aria-hidden": true,
+};
+
+function TimerIcon() {
+  return (
+    <svg {...svgProps}>
+      <line x1="10" y1="2" x2="14" y2="2" />
+      <line x1="12" y1="14" x2="15" y2="11" />
+      <circle cx="12" cy="14" r="8" />
+    </svg>
+  );
+}
+
+function CoffeeIcon() {
+  return (
+    <svg {...svgProps}>
+      <path d="M17 8h1a4 4 0 1 1 0 8h-1" />
+      <path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z" />
+      <line x1="6" y1="1" x2="6" y2="4" />
+      <line x1="10" y1="1" x2="10" y2="4" />
+      <line x1="14" y1="1" x2="14" y2="4" />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg {...svgProps}>
+      <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+    </svg>
+  );
+}
+
+// 番茄钟/工作 → 计时器图标;长休息 → 月亮;其余(短休息等)→ 咖啡杯。
+function PresetIcon({ preset }: { preset: Timer }) {
+  if (isWorkPreset(preset)) return <TimerIcon />;
+  if (preset.id === -3) return <MoonIcon />;
+  return <CoffeeIcon />;
+}
+
 export function TimerView({ refreshKey }: { refreshKey: number }) {
   const t = useT();
   const [presets, setPresets] = useState<Timer[]>([]);
@@ -281,11 +330,16 @@ export function TimerView({ refreshKey }: { refreshKey: number }) {
           <button
             key={p.id}
             onClick={() => (isWorkPreset(p) ? openSetup(p) : startOneShot(p))}
-            className="rounded-xl border border-line bg-surface px-3 py-4 text-center transition hover:border-accent"
+            className="flex items-center justify-center gap-3 rounded-xl border border-line bg-surface px-3 py-4 transition hover:border-accent"
           >
-            <span className="block text-sm font-medium text-ink">{presetName(p)}</span>
-            <span className="block text-xs text-muted">
-              {isWorkPreset(p) ? t("timer.pomodoroTechnique") : t("timer.minutes", { n: Math.round(p.duration_seconds / 60) })}
+            <span className="shrink-0 text-accent">
+              <PresetIcon preset={p} />
+            </span>
+            <span className="min-w-0 text-left">
+              <span className="block text-sm font-medium text-ink">{presetName(p)}</span>
+              <span className="block text-xs text-muted">
+                {isWorkPreset(p) ? t("timer.pomodoroTechnique") : t("timer.minutes", { n: Math.round(p.duration_seconds / 60) })}
+              </span>
             </span>
           </button>
         ))}
