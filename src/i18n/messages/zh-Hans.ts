@@ -37,7 +37,7 @@ export const zhHans: Record<keyof typeof en, string> = {
 
   "timer.pickOne": "选择一个计时",
   "timer.preset.pomodoro": "番茄钟",
-  "timer.preset.rule5217": "52/17 法则",
+  "timer.preset.rule5217": "52/17 计时",
   "timer.preset.shortBreak": "短休息",
   "timer.preset.longBreak": "长休息",
   "timer.pomodoroTechnique": "番茄工作法",
