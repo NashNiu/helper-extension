@@ -18,6 +18,7 @@ import { currentLocale } from "../shared/locale";
 import { initClipboard } from "./clipboard";
 import { storageGet, storageSet } from "../shared/storage";
 import { localDailyReminders } from "../shared/local/dailyReminders";
+import { presetNameKey } from "../shared/focusMethods";
 
 const ICON = "icon-128.png";
 // 记住回退弹窗的窗口 id:再次点通知时优先聚焦它,避免每次新建导致窗口越攒越多。
@@ -156,7 +157,7 @@ async function fireTimerDone() {
         nid,
         translate(loc, "notify.breakTitle"),
         translate(loc, "notify.breakBody", {
-          name: translate(loc, t.timerId === -4 ? "timer.preset.rule5217" : "timer.preset.pomodoro"),
+          name: translate(loc, presetNameKey(t.timerId) ?? "timer.preset.pomodoro"),
         }),
       );
     } else {

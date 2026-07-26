@@ -8,10 +8,9 @@ import {
   resumeTimer,
   restartPhase,
   cancelTimer,
-  SHORT_BREAK_SEC,
-  LONG_BREAK_SEC,
 } from "../../shared/timerControl";
 import { isLongBreakCycle, nextStep, plannedTotalSeconds } from "../../background/logic";
+import { presetNameKey, focusMethod } from "../../shared/focusMethods";
 import { useCountdown } from "./useCountdown";
 import { Button } from "../../components/Button";
 import { useT } from "../../i18n/react";
@@ -29,28 +28,9 @@ function fmtClock(ms: number): string {
   return `${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-// 判定「工作/番茄钟」预设:本地固定 id -1,或名称含「番茄」,或时长 ≥ 20 分钟。
+// 判定「工作」预设(进入循环设置):本地固定 id -1,或名称含「番茄」,或时长 ≥ 20 分钟。
 function isWorkPreset(t: Timer): boolean {
   return t.id === -1 || t.name.includes("番茄") || t.duration_seconds >= 20 * 60;
-}
-
-function localPresetKey(id: number): MessageKey | null {
-  if (id === -1) return "timer.preset.pomodoro";
-  if (id === -2) return "timer.preset.shortBreak";
-  if (id === -3) return "timer.preset.longBreak";
-  if (id === -4) return "timer.preset.rule5217";
-  return null;
-}
-
-// 52/17 法则:52 分钟工作 + 17 分钟休息,无长休息。
-function is5217Preset(t: Timer): boolean {
-  return t.id === -4 || /52\s*[/+]?\s*17/.test(t.name);
-}
-
-// 工作预设的休息配置:52/17 为固定 17 分钟休息、无长休息;其余走经典番茄钟(5/15,每 4 轮长休息)。
-function focusBreakConfig(t: Timer): { shortSec: number; longSec: number; longBreakEvery: number } {
-  if (is5217Preset(t)) return { shortSec: 17 * 60, longSec: 17 * 60, longBreakEvery: 0 };
-  return { shortSec: SHORT_BREAK_SEC, longSec: LONG_BREAK_SEC, longBreakEvery: 4 };
 }
 
 const stepBtn =
@@ -109,9 +89,21 @@ function ZapIcon() {
   );
 }
 
-// 52/17 → 闪电;番茄钟/工作 → 计时器;长休息 → 月亮;其余(短休息等)→ 咖啡杯。
+function HourglassIcon() {
+  return (
+    <svg {...svgProps}>
+      <path d="M5 22h14" />
+      <path d="M5 2h14" />
+      <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22" />
+      <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" />
+    </svg>
+  );
+}
+
+// 52/17 → 闪电;90 分钟 → 沙漏;番茄钟/工作 → 计时器;长休息 → 月亮;其余(短休息等)→ 咖啡杯。
 function PresetIcon({ preset }: { preset: Timer }) {
-  if (is5217Preset(preset)) return <ZapIcon />;
+  if (preset.id === -4) return <ZapIcon />;
+  if (preset.id === -5) return <HourglassIcon />;
   if (isWorkPreset(preset)) return <TimerIcon />;
   if (preset.id === -3) return <MoonIcon />;
   return <CoffeeIcon />;
@@ -129,7 +121,7 @@ export function TimerView({ refreshKey }: { refreshKey: number }) {
   }, [refreshKey]);
 
   function openSetup(p: Timer) {
-    setCycles(is5217Preset(p) ? 2 : 4);
+    setCycles(focusMethod(p.id).defaultCycles);
     setPendingWork(p);
   }
 
@@ -140,11 +132,11 @@ export function TimerView({ refreshKey }: { refreshKey: number }) {
 
   async function confirmPomodoro() {
     if (!pendingWork) return;
-    const cfg = focusBreakConfig(pendingWork);
+    const m = focusMethod(pendingWork.id);
     await startPomodoro(pendingWork, cycles, {
-      shortBreakSec: cfg.shortSec,
-      longBreakSec: cfg.longSec,
-      longBreakEvery: cfg.longBreakEvery,
+      shortBreakSec: m.shortBreakSec,
+      longBreakSec: m.longBreakSec,
+      longBreakEvery: m.longBreakEvery,
     });
     setPendingWork(null);
     await refresh();
@@ -161,7 +153,7 @@ export function TimerView({ refreshKey }: { refreshKey: number }) {
   const onCancel = act(cancelTimer);
 
   const presetName = (p: Timer) => {
-    const k = localPresetKey(p.id);
+    const k = presetNameKey(p.id);
     return k ? t(k) : p.name;
   };
 
@@ -187,7 +179,7 @@ export function TimerView({ refreshKey }: { refreshKey: number }) {
       const finished = awaiting && !isWork && nextStep(session).done;
       const longNext = isLongBreakCycle(session.cycleIndex, session.longBreakEvery ?? 4);
       const breakMin = Math.round((longNext ? session.longBreakSec : session.shortBreakSec) / 60);
-      const methodName = t(timer.timerId === -4 ? "timer.preset.rule5217" : "timer.preset.pomodoro");
+      const methodName = t(presetNameKey(timer.timerId) ?? "timer.preset.pomodoro");
       const advanceLabel = isWork
         ? t(longNext ? "timer.startLongBreak" : "timer.startBreak", { min: breakMin })
         : t("timer.startNextRound", { n: session.cycleIndex + 1 });
@@ -263,7 +255,7 @@ export function TimerView({ refreshKey }: { refreshKey: number }) {
 
     // ── 一次性计时 ──
     const oneShotTitle = (() => {
-      const k = localPresetKey(timer.timerId);
+      const k = presetNameKey(timer.timerId);
       return k ? t(k) : timer.name;
     })();
 
@@ -297,12 +289,12 @@ export function TimerView({ refreshKey }: { refreshKey: number }) {
 
   // ── 番茄钟设置:选循环次数 ────────────────────────────────────────────────────
   if (pendingWork) {
-    const cfg = focusBreakConfig(pendingWork);
-    const simple = is5217Preset(pendingWork);
+    const m = focusMethod(pendingWork.id);
+    const simple = m.simple;
     const workMin = Math.round(pendingWork.duration_seconds / 60);
-    const shortMin = Math.round(cfg.shortSec / 60);
-    const longMin = Math.round(cfg.longSec / 60);
-    const totalSec = plannedTotalSeconds(cycles, pendingWork.duration_seconds, cfg.shortSec, cfg.longSec);
+    const shortMin = Math.round(m.shortBreakSec / 60);
+    const longMin = Math.round(m.longBreakSec / 60);
+    const totalSec = plannedTotalSeconds(cycles, pendingWork.duration_seconds, m.shortBreakSec, m.longBreakSec);
     const totalMin = Math.round(totalSec / 60);
     const endStr = fmtClock(Date.now() + totalSec * 1000);
 
@@ -371,11 +363,9 @@ export function TimerView({ refreshKey }: { refreshKey: number }) {
             <span className="min-w-0 text-left">
               <span className="block text-sm font-medium text-ink">{presetName(p)}</span>
               <span className="block text-xs text-muted">
-                {is5217Preset(p)
-                  ? t("timer.rule5217Technique")
-                  : isWorkPreset(p)
-                    ? t("timer.pomodoroTechnique")
-                    : t("timer.minutes", { n: Math.round(p.duration_seconds / 60) })}
+                {isWorkPreset(p)
+                  ? t(focusMethod(p.id).techniqueKey)
+                  : t("timer.minutes", { n: Math.round(p.duration_seconds / 60) })}
               </span>
             </span>
           </button>
