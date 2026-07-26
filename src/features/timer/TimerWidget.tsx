@@ -9,19 +9,12 @@ import { useState } from "react";
 import { useCountdown } from "./useCountdown";
 import { Button } from "../../components/Button";
 import { useT } from "../../i18n/react";
-import type { MessageKey } from "../../i18n/messages/en";
+import { presetNameKey } from "../../shared/focusMethods";
 
 function fmt(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
-
-function localPresetKey(id: number): MessageKey | null {
-  if (id === -1) return "timer.preset.pomodoro";
-  if (id === -2) return "timer.preset.shortBreak";
-  if (id === -3) return "timer.preset.longBreak";
-  return null;
 }
 
 function FlameIcon() {
@@ -87,7 +80,7 @@ export function TimerWidget({ onOpen }: { onOpen: () => void }) {
 
   const title = session
     ? t("widget.title", { current: session.cycleIndex, total: session.cycles, phase: t(isWork ? "widget.work" : "widget.break") })
-    : (() => { const k = localPresetKey(timer.timerId); return k ? t(k) : timer.name; })();
+    : (() => { const k = presetNameKey(timer.timerId); return k ? t(k) : timer.name; })();
   const timeText = awaiting ? (finished ? t("widget.allDone") : t("widget.phaseDone")) : fmt(remaining);
   const timeColor = paused ? "text-muted" : isWork ? "text-ink" : "text-accent";
   const Icon = finished ? ClockIcon : isWork ? FlameIcon : CupIcon;
