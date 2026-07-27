@@ -19,14 +19,11 @@ function byTime(a: DailyReminder, b: DailyReminder): number {
 function scheduleAlarm(r: DailyReminder): void {
   try {
     if (typeof chrome !== "undefined" && chrome.alarms) {
-      const when = nextDailyTrigger(r.hour, r.minute, Date.now());
-      console.log("[daily-debug] store.scheduleAlarm:", `${DAILY_ALARM_PREFIX}${r.id}`, "when=", new Date(when).toISOString(), "hasAlarmsApi=", !!chrome.alarms);
-      chrome.alarms.create(`${DAILY_ALARM_PREFIX}${r.id}`, { when });
-    } else {
-      console.log("[daily-debug] store.scheduleAlarm: chrome.alarms UNAVAILABLE in this context");
+      chrome.alarms.create(`${DAILY_ALARM_PREFIX}${r.id}`, {
+        when: nextDailyTrigger(r.hour, r.minute, Date.now()),
+      });
     }
-  } catch (e) {
-    console.error("[daily-debug] store.scheduleAlarm failed", e);
+  } catch {
     /* 忽略排程失败,后台 syncDailyAlarms 会兜底重排 */
   }
 }
