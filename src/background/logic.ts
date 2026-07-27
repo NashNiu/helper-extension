@@ -52,6 +52,7 @@ export interface ActiveTimer {
   status: "running" | "paused" | "awaiting"; // awaiting = 到点等用户点下一步
   pausedRemaining?: number;
   session?: PomodoroSession;  // 有则为番茄钟会话,无则为一次性计时
+  methodName?: string;        // 会话方法名(内置=预设名,自定义=用户名);不随阶段变化
 }
 
 // 该循环后是否进入长休息:every>0 时每 every 个循环一次;every=0 表示没有长休息(如 52/17)。

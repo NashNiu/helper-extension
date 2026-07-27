@@ -68,6 +68,7 @@ export async function startPomodoro(
     durationSeconds: session.workSec,
     status: "running",
     session,
+    methodName: workTimer.name,
   });
   setTimerAlarm(startAt + session.workSec * 1000);
 }
