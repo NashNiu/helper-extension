@@ -10,7 +10,9 @@ import {
   cancelTimer,
 } from "../../shared/timerControl";
 import { isLongBreakCycle, nextStep, plannedTotalSeconds } from "../../background/logic";
-import { presetNameKey, focusMethod } from "../../shared/focusMethods";
+import { presetNameKey, focusConfigFor } from "../../shared/focusMethods";
+import { localCustomTimers } from "../../shared/local/customTimers";
+import { CustomTimerForm } from "./CustomTimerForm";
 import { useCountdown } from "./useCountdown";
 import { Button } from "../../components/Button";
 import { useT } from "../../i18n/react";
@@ -28,9 +30,9 @@ function fmtClock(ms: number): string {
   return `${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-// 判定「工作」预设(进入循环设置):本地固定 id -1,或名称含「番茄」,或时长 ≥ 20 分钟。
-function isWorkPreset(t: Timer): boolean {
-  return t.id === -1 || t.name.includes("番茄") || t.duration_seconds >= 20 * 60;
+// 「专注法」预设(点击进入循环设置):内置 focus 预设与自定义 focus 均 type === "focus"。
+function isFocusPreset(t: Timer): boolean {
+  return t.type === "focus";
 }
 
 const stepBtn =
@@ -100,11 +102,21 @@ function HourglassIcon() {
   );
 }
 
-// 52/17 → 闪电;90 分钟 → 沙漏;番茄钟/工作 → 计时器;长休息 → 月亮;其余(短休息等)→ 咖啡杯。
+function ClockIcon() {
+  return (
+    <svg {...svgProps}>
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="12 7 12 12 16 14" />
+    </svg>
+  );
+}
+
+// 52/17 → 闪电;90 分钟 → 沙漏;自定义倒计时 → 时钟;专注法(番茄钟/自定义)→ 计时器;长休息 → 月亮;短休息 → 咖啡杯。
 function PresetIcon({ preset }: { preset: Timer }) {
   if (preset.id === -4) return <ZapIcon />;
   if (preset.id === -5) return <HourglassIcon />;
-  if (isWorkPreset(preset)) return <TimerIcon />;
+  if (preset.type === "countdown") return <ClockIcon />;
+  if (isFocusPreset(preset)) return <TimerIcon />;
   if (preset.id === -3) return <MoonIcon />;
   return <CoffeeIcon />;
 }
@@ -114,14 +126,16 @@ export function TimerView({ refreshKey }: { refreshKey: number }) {
   const [presets, setPresets] = useState<Timer[]>([]);
   const [pendingWork, setPendingWork] = useState<Timer | null>(null);
   const [cycles, setCycles] = useState(4);
+  const [creating, setCreating] = useState(false);
   const { timer, remaining, refresh } = useCountdown();
 
-  useEffect(() => {
+  const reload = () => {
     timerApi.list().then(setPresets).catch(() => {});
-  }, [refreshKey]);
+  };
+  useEffect(reload, [refreshKey]);
 
   function openSetup(p: Timer) {
-    setCycles(focusMethod(p.id).defaultCycles);
+    setCycles(focusConfigFor({ id: p.id, breakSeconds: p.breakSeconds, cycles: p.cycles }).defaultCycles);
     setPendingWork(p);
   }
 
@@ -132,7 +146,7 @@ export function TimerView({ refreshKey }: { refreshKey: number }) {
 
   async function confirmPomodoro() {
     if (!pendingWork) return;
-    const m = focusMethod(pendingWork.id);
+    const m = focusConfigFor({ id: pendingWork.id, breakSeconds: pendingWork.breakSeconds, cycles: pendingWork.cycles });
     await startPomodoro(pendingWork, cycles, {
       shortBreakSec: m.shortBreakSec,
       longBreakSec: m.longBreakSec,
@@ -140,6 +154,11 @@ export function TimerView({ refreshKey }: { refreshKey: number }) {
     });
     setPendingWork(null);
     await refresh();
+  }
+
+  async function deleteCustom(id: number) {
+    await localCustomTimers.remove(id);
+    reload();
   }
 
   const act = (fn: () => Promise<void>) => async () => {
@@ -179,7 +198,8 @@ export function TimerView({ refreshKey }: { refreshKey: number }) {
       const finished = awaiting && !isWork && nextStep(session).done;
       const longNext = isLongBreakCycle(session.cycleIndex, session.longBreakEvery ?? 4);
       const breakMin = Math.round((longNext ? session.longBreakSec : session.shortBreakSec) / 60);
-      const methodName = t(presetNameKey(timer.timerId) ?? "timer.preset.pomodoro");
+      const mKey = presetNameKey(timer.timerId);
+      const methodName = mKey ? t(mKey) : (timer.methodName ?? timer.name);
       const advanceLabel = isWork
         ? t(longNext ? "timer.startLongBreak" : "timer.startBreak", { min: breakMin })
         : t("timer.startNextRound", { n: session.cycleIndex + 1 });
@@ -287,9 +307,22 @@ export function TimerView({ refreshKey }: { refreshKey: number }) {
     );
   }
 
+  // ── 新建自定义计时器 ──────────────────────────────────────────────────────────
+  if (creating) {
+    return (
+      <CustomTimerForm
+        onCancel={() => setCreating(false)}
+        onCreated={() => {
+          setCreating(false);
+          reload();
+        }}
+      />
+    );
+  }
+
   // ── 番茄钟设置:选循环次数 ────────────────────────────────────────────────────
   if (pendingWork) {
-    const m = focusMethod(pendingWork.id);
+    const m = focusConfigFor({ id: pendingWork.id, breakSeconds: pendingWork.breakSeconds, cycles: pendingWork.cycles });
     const simple = m.simple;
     const workMin = Math.round(pendingWork.duration_seconds / 60);
     const shortMin = Math.round(m.shortBreakSec / 60);
@@ -352,24 +385,47 @@ export function TimerView({ refreshKey }: { refreshKey: number }) {
       <p className="mb-2 text-xs text-muted">{t("timer.pickOne")}</p>
       <div className="grid grid-cols-2 gap-2">
         {presets.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => (isWorkPreset(p) ? openSetup(p) : startOneShot(p))}
-            className="flex items-center justify-center gap-3 rounded-xl border border-line bg-surface px-3 py-4 transition hover:border-accent"
-          >
-            <span className="shrink-0 text-accent">
-              <PresetIcon preset={p} />
-            </span>
-            <span className="min-w-0 text-left">
-              <span className="block text-sm font-medium text-ink">{presetName(p)}</span>
-              <span className="block text-xs text-muted">
-                {isWorkPreset(p)
-                  ? t(focusMethod(p.id).techniqueKey)
-                  : t("timer.minutes", { n: Math.round(p.duration_seconds / 60) })}
+          <div key={p.id} className="relative">
+            <button
+              onClick={() => (isFocusPreset(p) ? openSetup(p) : startOneShot(p))}
+              className="flex w-full items-center justify-center gap-3 rounded-xl border border-line bg-surface px-3 py-4 transition hover:border-accent"
+            >
+              <span className="shrink-0 text-accent">
+                <PresetIcon preset={p} />
               </span>
-            </span>
-          </button>
+              <span className="min-w-0 text-left">
+                <span className="block text-sm font-medium text-ink">{presetName(p)}</span>
+                <span className="block text-xs text-muted">
+                  {isFocusPreset(p)
+                    ? t(focusConfigFor({ id: p.id, breakSeconds: p.breakSeconds, cycles: p.cycles }).techniqueKey)
+                    : t("timer.minutes", { n: Math.round(p.duration_seconds / 60) })}
+                </span>
+              </span>
+            </button>
+            {!p.is_preset && (
+              <button
+                type="button"
+                onClick={() => deleteCustom(p.id)}
+                aria-label={t("timer.deleteCustomAria", { name: p.name })}
+                className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-md text-muted transition hover:bg-danger/10 hover:text-danger"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
         ))}
+        <button
+          type="button"
+          onClick={() => setCreating(true)}
+          className="flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-line px-3 py-4 text-sm font-medium text-muted transition hover:border-accent hover:text-accent"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          {t("timer.newTimer")}
+        </button>
       </div>
     </div>
   );

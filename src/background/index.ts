@@ -152,20 +152,22 @@ async function fireTimerDone() {
   if (t.session) {
     // 会话:置等待态,不清空,等用户在面板手动进入下一段。
     await setActiveTimer({ ...t, status: "awaiting" });
+    const nameKey = presetNameKey(t.timerId);
+    const methodName = nameKey ? translate(loc, nameKey) : (t.methodName ?? t.name);
     if (t.session.phase === "work") {
       await notify(
         nid,
         translate(loc, "notify.breakTitle"),
-        translate(loc, "notify.breakBody", {
-          name: translate(loc, presetNameKey(t.timerId) ?? "timer.preset.pomodoro"),
-        }),
+        translate(loc, "notify.breakBody", { name: methodName }),
       );
     } else {
       const finished = nextStep(t.session).done;
       await notify(
         nid,
         finished ? translate(loc, "notify.allDoneTitle") : translate(loc, "notify.breakOverTitle"),
-        finished ? translate(loc, "notify.allDoneBody") : translate(loc, "notify.breakOverBody"),
+        finished
+          ? translate(loc, "notify.allDoneBody", { name: methodName })
+          : translate(loc, "notify.breakOverBody"),
       );
     }
     return;

@@ -65,3 +65,18 @@ const FOCUS_METHODS: Record<number, FocusMethod> = {
 export function focusMethod(id: number): FocusMethod {
   return FOCUS_METHODS[id] ?? POMODORO;
 }
+
+// 工作预设的专注配置:自定义(带 breakSeconds)用自身休息时长、无长休息;否则走内置注册表。
+export function focusConfigFor(opts: { id: number; breakSeconds?: number; cycles?: number }): FocusMethod {
+  if (opts.breakSeconds != null) {
+    return {
+      shortBreakSec: opts.breakSeconds,
+      longBreakSec: opts.breakSeconds,
+      longBreakEvery: 0,
+      defaultCycles: opts.cycles ?? 2,
+      simple: true,
+      techniqueKey: "timer.customFocusTechnique",
+    };
+  }
+  return focusMethod(opts.id);
+}

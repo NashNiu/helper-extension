@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { presetNameKey, focusMethod } from "./focusMethods";
+import { presetNameKey, focusMethod, focusConfigFor } from "./focusMethods";
 import { SHORT_BREAK_SEC, LONG_BREAK_SEC } from "./timerControl";
 
 describe("presetNameKey", () => {
@@ -49,5 +49,25 @@ describe("focusMethod", () => {
   it("pomodoro break durations stay in sync with timerControl constants", () => {
     expect(focusMethod(-1).shortBreakSec).toBe(SHORT_BREAK_SEC);
     expect(focusMethod(-1).longBreakSec).toBe(LONG_BREAK_SEC);
+  });
+});
+
+describe("focusConfigFor", () => {
+  it("uses the custom timer's own break/cycles when breakSeconds is given (simple, no long break)", () => {
+    expect(focusConfigFor({ id: -100, breakSeconds: 600, cycles: 3 })).toEqual({
+      shortBreakSec: 600,
+      longBreakSec: 600,
+      longBreakEvery: 0,
+      defaultCycles: 3,
+      simple: true,
+      techniqueKey: "timer.customFocusTechnique",
+    });
+  });
+  it("defaults custom cycles to 2 when omitted", () => {
+    expect(focusConfigFor({ id: -101, breakSeconds: 300 }).defaultCycles).toBe(2);
+  });
+  it("falls back to the built-in registry when no breakSeconds", () => {
+    expect(focusConfigFor({ id: -1 })).toBe(focusMethod(-1));
+    expect(focusConfigFor({ id: -4 })).toBe(focusMethod(-4));
   });
 });

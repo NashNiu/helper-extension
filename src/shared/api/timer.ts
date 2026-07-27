@@ -9,6 +9,8 @@ export interface Timer {
   type: string;
   is_preset: boolean;
   created_at: string;
+  breakSeconds?: number; // 自定义专注法的休息时长(秒)
+  cycles?: number;       // 自定义专注法的默认循环次数
 }
 
 export const timerApi = {

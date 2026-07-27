@@ -1,4 +1,5 @@
 import type { Timer } from "../api/timer";
+import { localCustomTimers, customTimerToTimer } from "./customTimers";
 
 // 未登录时的内置计时预设。负 id 与后端(正 id)不冲突;计时运行本就纯本地。
 export const LOCAL_TIMER_PRESETS: Timer[] = [
@@ -10,7 +11,9 @@ export const LOCAL_TIMER_PRESETS: Timer[] = [
 ];
 
 export const localTimers = {
-  list(): Promise<Timer[]> {
-    return Promise.resolve(LOCAL_TIMER_PRESETS);
+  // 内置预设 + 用户自定义(映射为 Timer,排在内置之后)。
+  async list(): Promise<Timer[]> {
+    const custom = (await localCustomTimers.list()).map(customTimerToTimer);
+    return [...LOCAL_TIMER_PRESETS, ...custom];
   },
 };
