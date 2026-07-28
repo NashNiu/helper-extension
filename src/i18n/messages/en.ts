@@ -125,6 +125,9 @@ export const en = {
   "profile.aiNetworkErr": "✗ Network error, try again",
   "profile.aiHint": "Your key is stored locally and requests go directly to DeepSeek, never through our server. Get a key at platform.deepseek.com.",
   "profile.clipboardSection": "Clipboard",
+  "profile.soundSection": "Notification sound",
+  "profile.soundLabel": "Play a chime when due",
+  "profile.soundHint": "A short chime plays alongside the notification. Reminders and timers use different tones; adjust loudness with your system volume.",
 
   "login.title": "Sign in to Remind",
   "login.subtitle": "Sign in to sync across devices; you can also use the app locally without signing in.",
