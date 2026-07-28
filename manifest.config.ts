@@ -30,7 +30,7 @@ export default defineManifest({
       run_at: "document_idle",
     },
   ],
-  permissions: ["sidePanel", "alarms", "notifications", "storage", "unlimitedStorage", "contextMenus", "clipboardWrite", "clipboardRead"],
+  permissions: ["sidePanel", "alarms", "notifications", "offscreen", "storage", "unlimitedStorage", "contextMenus", "clipboardWrite", "clipboardRead"],
   host_permissions: [
     "https://helper-backend-sigma.vercel.app/*",
     "https://api.deepseek.com/*",
