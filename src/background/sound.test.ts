@@ -16,7 +16,7 @@ function mockChrome(opts: { soundEnabled: boolean; createDocumentImpl?: () => Pr
     documentExists = true;
   });
   const hasDocument = vi.fn(async () => documentExists);
-  const sendMessage = vi.fn(async () => undefined);
+  const sendMessage = vi.fn(async (_msg: { type: string; notes: unknown }) => undefined);
 
   (globalThis as any).chrome = {
     storage: {
@@ -80,7 +80,11 @@ describe("playChime", () => {
       type: "helper.chime",
       notes: chimeNotes("timer"),
     });
-    expect(chimeNotes("reminder")).not.toEqual(chimeNotes("timer"));
+    // 比较实际派发的两条消息本身(而非各自重新计算的 chimeNotes),这样如果
+    // playChime 出 bug、无论传入什么 tone 都固定派发同一组音符,这里也能测出来。
+    const firstNotes = sendMessage.mock.calls[0][0].notes;
+    const secondNotes = sendMessage.mock.calls[1][0].notes;
+    expect(firstNotes).not.toEqual(secondNotes);
   });
 
   it("never rejects even when createDocument fails", async () => {
