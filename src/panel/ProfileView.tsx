@@ -11,6 +11,7 @@ import type { MessageKey } from "../i18n/messages/en";
 import { getKey, setKey, clearKey } from "../shared/ai/apiKey";
 import { validateKey } from "../shared/ai/deepseek";
 import { getSettings, setLimit, setAutoCapture, DEFAULT_LIMIT } from "../shared/clipboardStore";
+import { isSoundEnabled, setSoundEnabled } from "../shared/soundSettings";
 
 type Seg = "todos" | "reminders";
 
@@ -343,6 +344,37 @@ function AiKeyCard() {
   );
 }
 
+function SoundSettingsCard() {
+  const t = useT();
+  // 先按默认值 true 渲染,避免异步读盘前复选框闪一下未选中态。
+  const [enabled, setEnabled] = useState(true);
+
+  useEffect(() => {
+    void isSoundEnabled().then(setEnabled);
+  }, []);
+
+  async function toggle(next: boolean) {
+    setEnabled(next);
+    await setSoundEnabled(next);
+  }
+
+  return (
+    <div className="mb-3 rounded-2xl border border-line bg-surface p-4">
+      <div className="mb-3 text-sm font-semibold text-ink">{t("profile.soundSection")}</div>
+      <label className="flex cursor-pointer items-center gap-2 text-sm text-ink">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => void toggle(e.target.checked)}
+          className="h-4 w-4 accent-accent"
+        />
+        {t("profile.soundLabel")}
+      </label>
+      <p className="mt-2 text-xs leading-relaxed text-muted">{t("profile.soundHint")}</p>
+    </div>
+  );
+}
+
 function ClipboardSettingsCard() {
   const t = useT();
   const [limitDraft, setLimitDraft] = useState(String(DEFAULT_LIMIT));
@@ -423,6 +455,7 @@ export function ProfileView({
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3.5">
         <AiKeyCard />
+        <SoundSettingsCard />
         <ClipboardSettingsCard />
         {/* 语言选择器 */}
         <div className="flex items-center justify-between rounded-2xl border border-line bg-surface px-4 py-3">

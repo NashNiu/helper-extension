@@ -127,6 +127,9 @@ export const zhHant: Record<keyof typeof en, string> = {
   "profile.aiNetworkErr": "✗ 網路錯誤，請重試",
   "profile.aiHint": "Key 僅存本機，請求直連 DeepSeek，不經過我方伺服器。可在 platform.deepseek.com 取得 Key。",
   "profile.clipboardSection": "剪貼簿",
+  "profile.soundSection": "聲音提醒",
+  "profile.soundLabel": "到時播放提示音",
+  "profile.soundHint": "彈通知的同時會響一聲短提示音，提醒與計時音色不同。音量請用系統音量調節。",
 
   "login.title": "登入「記得」",
   "login.subtitle": "登入後資料可在多裝置間同步；不登入也能在本機使用。",

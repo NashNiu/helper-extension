@@ -19,6 +19,8 @@ import { initClipboard } from "./clipboard";
 import { storageGet, storageSet } from "../shared/storage";
 import { localDailyReminders } from "../shared/local/dailyReminders";
 import { presetNameKey } from "../shared/focusMethods";
+import { playChime } from "./sound";
+import type { ChimeTone } from "../shared/chime";
 
 const ICON = "icon-128.png";
 // 记住回退弹窗的窗口 id:再次点通知时优先聚焦它,避免每次新建导致窗口越攒越多。
@@ -41,7 +43,9 @@ chrome.runtime.onStartup.addListener(() => {
   void syncDailyAlarms();
 });
 
-async function notify(id: string, title: string, message: string) {
+async function notify(id: string, title: string, message: string, tone: ChimeTone) {
+  // 不 await:声音失败绝不能挡住横幅,也不该让横幅等它。
+  void playChime(tone);
   await chrome.notifications.create(id, {
     type: "basic",
     iconUrl: chrome.runtime.getURL(ICON),
@@ -50,6 +54,9 @@ async function notify(id: string, title: string, message: string) {
     priority: 2,
     // 常驻直到用户处理,避免横幅一闪而过被错过。
     requireInteraction: true,
+    // 压掉系统通知中心自带的提示音:我们自己已经放了 chime,两个声音会叠在一起。
+    // 关掉声音开关时就是彻底静音——「关掉声音提醒」本来就该是这个意思。
+    silent: true,
   });
 }
 
@@ -60,7 +67,7 @@ async function fireReminder(reminderId: number) {
     const r = pending.find((x) => x.id === reminderId);
     if (!r) return; // 已被删除/触发
     const loc = await currentLocale();
-    await notify(`${REMINDER_ALARM_PREFIX}${r.id}`, translate(loc, "notify.reminderTitle"), r.message);
+    await notify(`${REMINDER_ALARM_PREFIX}${r.id}`, translate(loc, "notify.reminderTitle"), r.message, "reminder");
     await reminderApi.markTriggered(r.id);
   } catch (e) {
     console.error("fireReminder failed", e);
@@ -73,7 +80,7 @@ async function runHeartbeat() {
     const { dueNow, toSchedule } = planReminders(pending, Date.now());
     const loc = await currentLocale();
     for (const r of dueNow) {
-      await notify(`${REMINDER_ALARM_PREFIX}${r.id}`, translate(loc, "notify.reminderTitle"), r.message);
+      await notify(`${REMINDER_ALARM_PREFIX}${r.id}`, translate(loc, "notify.reminderTitle"), r.message, "reminder");
       await reminderApi.markTriggered(r.id);
     }
     for (const s of toSchedule) {
@@ -113,6 +120,7 @@ async function fireDaily(id: number, scheduledTime: number) {
         `${DAILY_ALARM_PREFIX}${d.id}:${Date.now()}`,
         translate(loc, "notify.reminderTitle"),
         d.message,
+        "reminder",
       );
     }
     // 重排次日。
@@ -140,6 +148,7 @@ async function fireTimerDone() {
         nid,
         translate(loc, "notify.breakTitle"),
         translate(loc, "notify.breakBody", { name: methodName }),
+        "timer",
       );
     } else {
       const finished = nextStep(t.session).done;
@@ -149,12 +158,13 @@ async function fireTimerDone() {
         finished
           ? translate(loc, "notify.allDoneBody", { name: methodName })
           : translate(loc, "notify.breakOverBody"),
+        "timer",
       );
     }
     return;
   }
   // 一次性计时:现状——通知 + 清空。
-  await notify(nid, translate(loc, "notify.timeUp"), translate(loc, "notify.timerEnded", { name: t.name }));
+  await notify(nid, translate(loc, "notify.timeUp"), translate(loc, "notify.timerEnded", { name: t.name }), "timer");
   await setActiveTimer(null);
 }
 

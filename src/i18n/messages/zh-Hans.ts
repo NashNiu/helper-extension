@@ -127,6 +127,9 @@ export const zhHans: Record<keyof typeof en, string> = {
   "profile.aiNetworkErr": "✗ 网络错误，请重试",
   "profile.aiHint": "Key 仅存本地，请求直连 DeepSeek，不经过我方服务器。可在 platform.deepseek.com 获取 Key。",
   "profile.clipboardSection": "剪贴板",
+  "profile.soundSection": "声音提醒",
+  "profile.soundLabel": "到时播放提示音",
+  "profile.soundHint": "弹通知的同时会响一声短提示音，提醒与计时音色不同。音量请用系统音量调节。",
 
   "login.title": "登录「记得」",
   "login.subtitle": "登录后数据可在多设备间同步；不登录也能在本机使用。",
