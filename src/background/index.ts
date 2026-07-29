@@ -54,6 +54,9 @@ async function notify(id: string, title: string, message: string, tone: ChimeTon
     priority: 2,
     // 常驻直到用户处理,避免横幅一闪而过被错过。
     requireInteraction: true,
+    // 压掉系统通知中心自带的提示音:我们自己已经放了 chime,两个声音会叠在一起。
+    // 关掉声音开关时就是彻底静音——「关掉声音提醒」本来就该是这个意思。
+    silent: true,
   });
 }
 
