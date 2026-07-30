@@ -12,7 +12,7 @@ import {
   planDailyAlarms,
 } from "./logic";
 import { reminderApi } from "../shared/api/reminder";
-import { getActiveTimer, setActiveTimer } from "../shared/activeTimer";
+import { getActiveTimer, setActiveTimer, ACTIVE_TIMER_KEY } from "../shared/activeTimer";
 import { translate } from "../i18n/core";
 import { currentLocale } from "../shared/locale";
 import { initClipboard } from "./clipboard";
@@ -21,6 +21,7 @@ import { localDailyReminders } from "../shared/local/dailyReminders";
 import { presetNameKey } from "../shared/focusMethods";
 import { playChime } from "./sound";
 import type { ChimeTone } from "../shared/chime";
+import { refreshBadge } from "./badge";
 
 const ICON = "icon-128.png";
 // 记住回退弹窗的窗口 id:再次点通知时优先聚焦它,避免每次新建导致窗口越攒越多。
@@ -35,6 +36,7 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 });
   void initClipboard();
   void syncDailyAlarms();
+  void refreshBadge();
 });
 
 chrome.runtime.onStartup.addListener(() => {
@@ -89,6 +91,9 @@ async function runHeartbeat() {
     await syncDailyAlarms();
   } catch (e) {
     console.error("heartbeat failed", e);
+  } finally {
+    // 放 finally:上面的 listPending 离线时会抛,不能让网络失败把徒标数字一起冻住。
+    void refreshBadge();
   }
 }
 
@@ -228,3 +233,19 @@ chrome.windows.onRemoved.addListener((winId) => {
     if (saved === winId) void storageSet(PANEL_WINDOW_KEY, null);
   });
 });
+
+// 计时状态一变就刷徒标。
+//
+// 监听 storage 而不是去改 timerControl.ts:那些操作(开始/暂停/继续/下一步/取消)跑在面板
+// 上下文里,而徒标只能由 service worker 写。解耦之后面板只管改状态,SW 只管反映状态,
+// 一个监听器就覆盖了全部状态变更——包括 fireTimerDone 自己置的 awaiting 态。
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  // 必须按 key 过滤:剪贴板、设置等写入很频繁,不过滤就会每次都白刷一遍徒标。
+  if (!(ACTIVE_TIMER_KEY in changes)) return;
+  void refreshBadge();
+});
+
+// service worker 每次被拉起都会重跑顶层脚本,这里是覆盖「SW 重启 / 浏览器重启」的唯一
+// 正确位置——onStartup 只在浏览器 profile 启动时触发,SW 被回收后重新拉起不会触发它。
+void refreshBadge();
