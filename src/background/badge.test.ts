@@ -94,9 +94,15 @@ describe("badgeFor", () => {
   });
 
   it("徒标文字永远不超过 3 个字符", () => {
-    for (const min of [1, 25, 99, 100, 500, 5000]) {
+    for (const min of [1, 25, 99, 100, 500, 5000, 6000, 100000]) {
       expect(badgeFor(oneShot({ durationSeconds: min * 60 }), NOW).text.length)
         .toBeLessThanOrEqual(3);
     }
+  });
+
+  it("99 小时及以上显示 99h(不让溢出)", () => {
+    expect(badgeFor(oneShot({ durationSeconds: 99 * 60 * 60 }), NOW).text).toBe("99h");
+    expect(badgeFor(oneShot({ durationSeconds: 100 * 60 * 60 }), NOW).text).toBe("99h");
+    expect(badgeFor(oneShot({ durationSeconds: 1000 * 60 * 60 }), NOW).text).toBe("99h");
   });
 });

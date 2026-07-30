@@ -17,7 +17,8 @@ export const BADGE_AWAITING = "#c0392b"; // 唯一跳出柔和调色板的颜色
 function durationText(sec: number): string {
   const minutes = Math.ceil(sec / 60);
   // 自定义计时的工作时长没有上限(CustomTimerForm 只有 min=1),三位数分钟是可达状态。
-  if (minutes >= 100) return `${Math.floor(minutes / 60)}h`;
+  // 99 小时及以上都显示「99h」,保证徒标文字不会溢出 3 字符的 Chrome 限制。
+  if (minutes >= 100) return `${Math.min(99, Math.floor(minutes / 60))}h`;
   // 下界取 1:剩 1 秒也显示「1」,显示「0」会让人以为已经结束。
   return String(Math.max(1, minutes));
 }
