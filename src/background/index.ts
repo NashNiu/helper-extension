@@ -209,7 +209,10 @@ async function recoverTimerAlarm() {
     const t = await getActiveTimer();
     // 已存在的闹钟必须原样不动,所以先查再判。
     const existing = await chrome.alarms.get(TIMER_ALARM);
-    const action = planTimerAlarm(t, existing !== undefined, Date.now());
+    // @types/chrome 把 alarms.get 标成返回 Promise<Alarm>,但实际没有闹钟时
+    // Chrome 会 resolve undefined。用 != null 兜住 null/undefined 两种哨兵值,
+    // 避免哪天引擎行为变了、严格比较误判成「闹钟还在」导致自愈永久失效。
+    const action = planTimerAlarm(t, existing != null, Date.now());
     if (action.kind === "schedule") {
       chrome.alarms.create(TIMER_ALARM, { when: action.when });
     } else if (action.kind === "fire") {

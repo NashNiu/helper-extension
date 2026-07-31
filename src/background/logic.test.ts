@@ -319,6 +319,11 @@ describe("planTimerAlarm", () => {
     expect(planTimerAlarm(running(), true, NOW + 26 * 60_000)).toEqual({ kind: "none" });
   });
 
+  it("闹钟已存在时绝不插手——还没到点也一样,不能因为没到点就绕过这道守卫", () => {
+    // 守卫必须排在 due > now 判断之前:哪怕还没到点,只要闹钟还在就不该重建
+    expect(planTimerAlarm(running(), true, NOW + 60_000)).toEqual({ kind: "none" });
+  });
+
   it("暂停中不需要闹钟", () => {
     const t = running({ status: "paused", pausedRemaining: 300 });
     expect(planTimerAlarm(t, false, NOW)).toEqual({ kind: "none" });
