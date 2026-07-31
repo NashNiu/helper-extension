@@ -17,6 +17,8 @@ import {
   estimatedEndAt,
   displayRemaining,
   plannedTotalSeconds,
+  planTimerAlarm,
+  TIMER_CATCHUP_TOLERANCE_MS,
   type PomodoroSession,
   type ActiveTimer,
 } from "./logic";
@@ -291,5 +293,83 @@ describe("planDailyAlarms", () => {
     expect(planDailyAlarms(reminders, existing, now)).toEqual([
       { name: `${DAILY_ALARM_PREFIX}1`, when: nextDailyTrigger(20, 0, now) },
     ]);
+  });
+});
+
+describe("planTimerAlarm", () => {
+  const NOW = 1_700_000_000_000;
+
+  function running(over: Partial<ActiveTimer> = {}): ActiveTimer {
+    return {
+      timerId: 1,
+      name: "专注",
+      startAt: NOW,
+      durationSeconds: 25 * 60,
+      status: "running",
+      ...over,
+    };
+  }
+
+  it("没有计时时无需自愈", () => {
+    expect(planTimerAlarm(null, false, NOW)).toEqual({ kind: "none" });
+  });
+
+  it("闹钟已存在时绝不插手——重建会顶掉正待投递的闹钟", () => {
+    // 即使已经过点,只要闹钟还在就必须留着让它自己触发
+    expect(planTimerAlarm(running(), true, NOW + 26 * 60_000)).toEqual({ kind: "none" });
+  });
+
+  it("闹钟已存在时绝不插手——还没到点也一样,不能因为没到点就绕过这道守卫", () => {
+    // 守卫必须排在 due > now 判断之前:哪怕还没到点,只要闹钟还在就不该重建
+    expect(planTimerAlarm(running(), true, NOW + 60_000)).toEqual({ kind: "none" });
+  });
+
+  it("暂停中不需要闹钟", () => {
+    const t = running({ status: "paused", pausedRemaining: 300 });
+    expect(planTimerAlarm(t, false, NOW)).toEqual({ kind: "none" });
+  });
+
+  it("已是 awaiting 说明早就触发过了,不重复处理", () => {
+    expect(planTimerAlarm(running({ status: "awaiting" }), false, NOW)).toEqual({ kind: "none" });
+  });
+
+  it("闹钟丢了且还没到点 → 按原定时刻补建", () => {
+    const t = running();
+    const due = NOW + 25 * 60_000;
+    expect(planTimerAlarm(t, false, NOW + 60_000)).toEqual({ kind: "schedule", when: due });
+  });
+
+  it("补建用的是原定到点时刻,不是「从现在起再算一遍」", () => {
+    // 已经走了 20 分钟,补建的闹钟应该只剩 5 分钟,而不是又是 25 分钟
+    const t = running();
+    const r = planTimerAlarm(t, false, NOW + 20 * 60_000);
+    expect(r).toEqual({ kind: "schedule", when: NOW + 25 * 60_000 });
+  });
+
+  it("刚过点(容忍窗口内) → 正常触发", () => {
+    const t = running();
+    const justAfterDue = NOW + 25 * 60_000 + 1000;
+    expect(planTimerAlarm(t, false, justAfterDue)).toEqual({ kind: "fire" });
+  });
+
+  it("过点太久 → 静默结算,不补弹通知", () => {
+    const t = running();
+    const longAfter = NOW + 25 * 60_000 + TIMER_CATCHUP_TOLERANCE_MS + 1;
+    expect(planTimerAlarm(t, false, longAfter)).toEqual({ kind: "expire" });
+  });
+
+  it("容忍窗口边界:正好在窗口上仍算刚过点", () => {
+    const t = running();
+    const atEdge = NOW + 25 * 60_000 + TIMER_CATCHUP_TOLERANCE_MS;
+    expect(planTimerAlarm(t, false, atEdge)).toEqual({ kind: "fire" });
+  });
+
+  it("正好到点那一刻算刚过点而不是补建", () => {
+    const t = running();
+    expect(planTimerAlarm(t, false, NOW + 25 * 60_000)).toEqual({ kind: "fire" });
+  });
+
+  it("容忍窗口与每日提醒的一致", () => {
+    expect(TIMER_CATCHUP_TOLERANCE_MS).toBe(DAILY_CATCHUP_TOLERANCE_MS);
   });
 });
