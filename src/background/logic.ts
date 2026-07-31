@@ -178,3 +178,40 @@ export function planDailyAlarms(
   }
   return toCreate;
 }
+
+// 计时到点后的补触发容忍窗口。与每日提醒同一策略、同一数值:窗口内算「刚过点」,
+// 补一次正常触发;超出窗口(如浏览器关了一夜)只结算状态,不补弹通知——八小时后
+// 突然弹一个「该休息了」只是噪音。
+export const TIMER_CATCHUP_TOLERANCE_MS = DAILY_CATCHUP_TOLERANCE_MS;
+
+/** 自愈动作。none = 什么都不做;schedule = 补建闹钟;fire = 走正常到点流程;expire = 静默结算。 */
+export type TimerRecovery =
+  | { kind: "none" }
+  | { kind: "schedule"; when: number }
+  | { kind: "fire" }
+  | { kind: "expire" };
+
+/**
+ * 拿持久化的计时状态核对 TIMER_ALARM,判断要不要自愈、怎么自愈。纯函数,便于单测。
+ *
+ * 为什么需要它:ActiveTimer 存在 storage 里(持久),但 TIMER_ALARM 只由面板侧的
+ * timerControl 创建。扩展重载会清掉闹钟却留下状态,于是计时永远不会响——而这是
+ * 唯一的完成路径(useCountdown 只渲染,awaiting 只由 fireTimerDone 设置)。
+ */
+export function planTimerAlarm(
+  timer: ActiveTimer | null,
+  hasTimerAlarm: boolean,
+  now: number,
+): TimerRecovery {
+  if (!timer) return { kind: "none" };
+  // 只有 running 才该有闹钟:paused 是故意清掉的,awaiting 说明早就触发过了。
+  if (timer.status !== "running") return { kind: "none" };
+  // 闹钟还在就绝不插手。照 planDailyAlarms 的教训:重建会把一个刚到点、正待投递的
+  // 闹钟顶掉(心跳与到点闹钟常在同一批唤醒,心跳先跑就会取消这次触发)。
+  if (hasTimerAlarm) return { kind: "none" };
+  const due = timer.startAt + timer.durationSeconds * 1000;
+  // 用原定到点时刻,不能「从现在起重新算一遍」——那会把已经走掉的时间白送回去。
+  if (due > now) return { kind: "schedule", when: due };
+  if (now - due <= TIMER_CATCHUP_TOLERANCE_MS) return { kind: "fire" };
+  return { kind: "expire" };
+}
