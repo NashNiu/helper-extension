@@ -5,6 +5,7 @@ import { Loading } from "../../components/Loading";
 import { useInfiniteList } from "../../shared/useInfiniteList";
 import { useT } from "../../i18n/react";
 import { TodoImageStrip } from "./TodoImageStrip";
+import { ClipboardImagePicker } from "./ClipboardImagePicker";
 import { MAX_TODO_IMAGES } from "../../shared/api/todo";
 import { downscale } from "../../shared/images";
 import { MAX_IMAGE_BYTES } from "../../shared/clipboardStore";
@@ -63,6 +64,7 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
   const [busyImageId, setBusyImageId] = useState<number | null>(null);
+  const [pickingFor, setPickingFor] = useState<number | null>(null);
 
   // 列表只含未完成项，勾选即标记完成并从列表移除。
   async function complete(t: Todo) {
@@ -144,6 +146,29 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
       const small = await downscale(blob);
       const images = await todoApi.addImages(t.id, [small]);
       setItems((xs) => xs.map((x) => (x.id === t.id ? { ...x, images } : x)));
+      setErr("");
+    } catch {
+      setErr(tr("todo.imageAddFailed"));
+    } finally {
+      setBusyImageId(null);
+    }
+  }
+
+  /** 从剪贴板板选中一张:dataUrl → Blob → 走与粘贴完全相同的降采样与上传路径。 */
+  async function attachFromClipboard(todoId: number, dataUrl: string) {
+    setPickingFor(null);
+    const t = items.find((x) => x.id === todoId);
+    if (!t) return;
+    if (t.images.length >= MAX_TODO_IMAGES) {
+      setErr(tr("todo.imageMax", { max: MAX_TODO_IMAGES }));
+      return;
+    }
+    setBusyImageId(todoId);
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      const small = await downscale(blob);
+      const images = await todoApi.addImages(todoId, [small]);
+      setItems((xs) => xs.map((x) => (x.id === todoId ? { ...x, images } : x)));
       setErr("");
     } catch {
       setErr(tr("todo.imageAddFailed"));
@@ -244,6 +269,14 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
                     >
                       {tr("todo.pasteImage")}
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setPickingFor(t.id)}
+                      disabled={busyImageId === t.id}
+                      className="ml-1.5 rounded-lg border border-line px-2 py-1 text-xs text-muted transition hover:border-accent hover:text-ink disabled:opacity-40"
+                    >
+                      {tr("todo.fromClipboard")}
+                    </button>
                     <TodoImageStrip images={t.images} onRemove={(imgId) => void dropImage(t, imgId)} />
                   </div>
                 ) : (
@@ -258,6 +291,12 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
       )}
       {hasMore && <div ref={sentinelRef} aria-hidden="true" className="h-px" />}
       {loadingMore && <p className="py-3 text-center text-xs text-muted">{tr("common.loading")}</p>}
+      {pickingFor !== null && (
+        <ClipboardImagePicker
+          onPick={(dataUrl) => void attachFromClipboard(pickingFor, dataUrl)}
+          onClose={() => setPickingFor(null)}
+        />
+      )}
     </>
   );
 }
