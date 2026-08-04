@@ -94,4 +94,12 @@ describe("localTodos 图片", () => {
     expect(got.content).toBe("新标题");
     expect(got.images).toHaveLength(1);
   });
+
+  it("update 的返回值本身要带上真实图片,不是创建时的占位空数组", async () => {
+    const t = await localTodos.create("旧标题");
+    await localTodos.addImages(t.id, ["data:a", "data:b"]);
+    const updated = await localTodos.update(t.id, { content: "新标题" });
+    expect(updated.images).toHaveLength(2);
+    expect(updated.images.map((i) => i.url)).toEqual(["data:a", "data:b"]);
+  });
 });

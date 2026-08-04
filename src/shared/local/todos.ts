@@ -58,6 +58,9 @@ export const localTodos = {
       is_done: false,
       created_at: new Date().toISOString(),
       done_at: null,
+      // 主列表里的 images 只是占位值(新建待办确实没有图片)。它不是图片数据的来源——
+      // 真实数据始终在 helper.local.todoImg.<id> 键里;hydrate()/update() 读取时都会
+      // 用 readImages() 重新取一遍,不会信任这里存的值。
       images: [],
     };
     await writeList(KEY, [...list, todo]);
@@ -82,7 +85,9 @@ export const localTodos = {
     };
     list[idx] = next;
     await writeList(KEY, list);
-    return next;
+    // next.images 是主列表里的占位值,从未被 addImages/removeImage 更新过——
+    // 返回值必须重新读图片键才是真实数据,否则调用方会看到「明明有图片却返回 0 张」的假象。
+    return { ...next, images: await readImages(id) };
   },
 
   async remove(id: number): Promise<void> {
