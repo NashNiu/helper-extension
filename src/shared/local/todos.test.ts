@@ -102,4 +102,28 @@ describe("localTodos 图片", () => {
     expect(updated.images).toHaveLength(2);
     expect(updated.images.map((i) => i.url)).toEqual(["data:a", "data:b"]);
   });
+
+  it("累计超过 9 张时 addImages 拒绝,且不改动已存的图片", async () => {
+    const t = await localTodos.create("图多");
+    const seven = Array.from({ length: 7 }, (_, i) => `data:${i}`);
+    const before = await localTodos.addImages(t.id, seven);
+    expect(before).toHaveLength(7);
+
+    const three = ["data:x", "data:y", "data:z"];
+    await expect(localTodos.addImages(t.id, three)).rejects.toThrow();
+
+    const [after] = await localTodos.listActive();
+    expect(after.images).toHaveLength(7);
+    expect(after.images.map((i) => i.url)).toEqual(seven);
+  });
+
+  it("累计恰好等于 9 张时 addImages 成功", async () => {
+    const t = await localTodos.create("图多");
+    const seven = Array.from({ length: 7 }, (_, i) => `data:${i}`);
+    await localTodos.addImages(t.id, seven);
+
+    const two = ["data:x", "data:y"];
+    const after = await localTodos.addImages(t.id, two);
+    expect(after).toHaveLength(9);
+  });
 });

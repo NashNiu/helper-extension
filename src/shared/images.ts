@@ -2,6 +2,17 @@
 export const MAX_EDGE = 1600;
 /** WebP 编码质量。0.8 在这个用途下肉眼无损。 */
 export const WEBP_QUALITY = 0.8;
+/**
+ * 与后端一致的每条待办图片数上限(backend/src/todo/todo.service.ts:145,
+ * `todo.images.length + files.length > 9` 触发 400)。放在这个中立模块而不是
+ * api/todo.ts,是因为 api/todo.ts 与 local/todos.ts 都需要引用它,而
+ * local/todos.ts 目前只以 `type` 方式引用 api/todo.ts(编译期擦除,不构成运行时环);
+ * 若反过来在 api/todo.ts 里定义再被 local/todos.ts 当作值导入,就会在
+ * api/todo.ts(运行时导入 localTodos)与 local/todos.ts 之间闭合出一个真实的
+ * 运行时循环依赖,可能在模块初始化顺序不对时拿到 undefined。images.ts 不依赖
+ * 这两者中的任何一个,对双方都是安全的公共依赖。
+ */
+export const MAX_TODO_IMAGES = 9;
 
 /**
  * 等比缩放到长边不超过 max。长边已在限内时原样返回——绝不放大。

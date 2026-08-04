@@ -1,7 +1,10 @@
 import { apiFetch } from "../http";
 import { hasToken } from "../auth";
 import { localTodos } from "../local/todos";
-import { blobToDataUrl } from "../images";
+import { blobToDataUrl, MAX_TODO_IMAGES } from "../images";
+
+// 重新导出,让既有的 `from "../api/todo"` 导入路径不用改。
+export { MAX_TODO_IMAGES };
 
 export interface TodoImage {
   id: number;
@@ -17,9 +20,6 @@ export interface Todo {
   done_at: string | null;
   images: TodoImage[];
 }
-
-/** 与后端一致的每条待办图片数上限。后端超限会抛 400,所以客户端必须前置拦截。 */
-export const MAX_TODO_IMAGES = 9;
 
 // 后端返回的原始形状:图片字段叫 image_path,值是 Supabase 的完整公开 URL。
 interface RemoteTodoImage {
@@ -80,10 +80,16 @@ export const todoApi = {
 
   /**
    * 追加图片。传入的 blob 应当已经降采样过(调用方负责,见 shared/images.ts)。
-   * 上限检查在分流之前:两条路径共享同一规则,也避免打一个注定 400 的请求。
+   *
+   * 这里只能做「单批次」检查:后端的上限是累计的(已存数量 + 本次新增 > 9 才拒,
+   * backend/src/todo/todo.service.ts:145),而这个函数只拿到本次新增的 blobs,
+   * 结构上就不知道这条待办已经有多少张图——那个数字只有调用方(UI,持有
+   * t.images.length)手里有。所以累计上限必须由调用方在调这个函数之前自己核对;
+   * 这里的检查只防「单批次本身就超过 9 张」这种情况,避免打一个注定 400 的请求。
    */
   addImages: async (id: number, blobs: Blob[]): Promise<TodoImage[]> => {
     if (blobs.length === 0) return [];
+    if (blobs.length > MAX_TODO_IMAGES) throw new Error(`最多 ${MAX_TODO_IMAGES} 张图片`);
     if (await hasToken()) {
       const fd = new FormData();
       // 字段名必须是 images,与后端 FilesInterceptor('images', 9) 一致;

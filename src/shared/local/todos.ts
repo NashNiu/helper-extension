@@ -1,6 +1,7 @@
 import type { Todo, TodoImage } from "../api/todo";
 import { readList, writeList, nextId } from "./store";
 import { storageGet, storageSet, storageRemove } from "../storage";
+import { MAX_TODO_IMAGES } from "../images";
 
 const KEY = "helper.local.todos";
 
@@ -100,6 +101,13 @@ export const localTodos = {
 
   async addImages(id: number, dataUrls: string[]): Promise<TodoImage[]> {
     const cur = await readImages(id);
+    // 未登录没有后端兜底,这里必须是真正的累计上限检查(已存 + 本次新增),
+    // 而不是像 api/todo.ts 那样只能做单批次检查——那边结构上拿不到 cur.length,
+    // 这边因为已经在读 readImages(id) 了,天然就有。拒绝而不是截断:截断会
+    // 悄悄丢图片且用户不知道;拒绝与后端超限时的行为(抛错)保持一致。
+    if (cur.length + dataUrls.length > MAX_TODO_IMAGES) {
+      throw new Error(`最多 ${MAX_TODO_IMAGES} 张图片`);
+    }
     let nextImgId = cur.reduce((m, x) => Math.max(m, x.id), 0) + 1;
     let nextOrder = cur.reduce((m, x) => Math.max(m, x.sort_order), -1) + 1;
     const added = dataUrls.map((url) => ({ id: nextImgId++, url, sort_order: nextOrder++ }));
