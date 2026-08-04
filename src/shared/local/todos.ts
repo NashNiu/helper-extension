@@ -1,7 +1,29 @@
-import type { Todo } from "../api/todo";
+import type { Todo, TodoImage } from "../api/todo";
 import { readList, writeList, nextId } from "./store";
+import { storageGet, storageSet, storageRemove } from "../storage";
 
 const KEY = "helper.local.todos";
+
+// 图片按待办分键存放,不进待办列表本身。
+//
+// 为什么必须分开:writeList 每次重写整个列表,若把 base64 塞进待办记录,一次勾选完成
+// 就要把所有图片重新序列化并写盘。分键后附图只写它自己那一个键。
+// 为什么按待办分键而不是一个大 map:大 map 意味着渲染任意一条都要把全部图片读进内存;
+// 分键后列表分页是 10 条,只读这 10 个键,天然懒加载。
+const IMG_PREFIX = "helper.local.todoImg.";
+
+function imgKey(todoId: number): string {
+  return `${IMG_PREFIX}${todoId}`;
+}
+
+async function readImages(todoId: number): Promise<TodoImage[]> {
+  return (await storageGet<TodoImage[]>(imgKey(todoId))) ?? [];
+}
+
+/** 给一页待办补上各自的图片。缺键的待办得到空数组,兼容没有图片的旧数据。 */
+async function hydrate(list: Todo[]): Promise<Todo[]> {
+  return Promise.all(list.map(async (t) => ({ ...t, images: await readImages(t.id) })));
+}
 
 // 与后端一致:按创建时间倒序(新在前),同刻按 id 倒序。
 function byCreatedDesc(a: Todo, b: Todo): number {
@@ -18,14 +40,14 @@ export const localTodos = {
     const all = (await readList<Todo>(KEY))
       .filter((t) => !t.is_done)
       .sort(byCreatedDesc);
-    return all.slice(offset, offset + limit);
+    return hydrate(all.slice(offset, offset + limit));
   },
 
   async listDone(offset = 0, limit = 10): Promise<Todo[]> {
     const all = (await readList<Todo>(KEY))
       .filter((t) => t.is_done)
       .sort(byDoneDesc);
-    return all.slice(offset, offset + limit);
+    return hydrate(all.slice(offset, offset + limit));
   },
 
   async create(content: string): Promise<Todo> {
@@ -36,6 +58,7 @@ export const localTodos = {
       is_done: false,
       created_at: new Date().toISOString(),
       done_at: null,
+      images: [],
     };
     await writeList(KEY, [...list, todo]);
     return todo;
@@ -51,6 +74,7 @@ export const localTodos = {
     const cur = list[idx];
     const next: Todo = {
       ...cur,
+      images: cur.images ?? [],
       ...(data.content !== undefined ? { content: data.content } : {}),
       ...(data.is_done !== undefined
         ? { is_done: data.is_done, done_at: data.is_done ? new Date().toISOString() : null }
@@ -64,5 +88,24 @@ export const localTodos = {
   async remove(id: number): Promise<void> {
     const list = await readList<Todo>(KEY);
     await writeList(KEY, list.filter((t) => t.id !== id));
+    // 必须级联删除,而且这是正确性问题不是清理问题:nextId 是「当前列表最大 id + 1」,
+    // 所以删掉 id 最大的那条后,下一条新建的待办会拿到同一个 id,漏删就会凭空捡到旧图片。
+    await storageRemove(imgKey(id));
+  },
+
+  async addImages(id: number, dataUrls: string[]): Promise<TodoImage[]> {
+    const cur = await readImages(id);
+    let nextImgId = cur.reduce((m, x) => Math.max(m, x.id), 0) + 1;
+    let nextOrder = cur.reduce((m, x) => Math.max(m, x.sort_order), -1) + 1;
+    const added = dataUrls.map((url) => ({ id: nextImgId++, url, sort_order: nextOrder++ }));
+    const next = [...cur, ...added];
+    await storageSet(imgKey(id), next);
+    return next;
+  },
+
+  async removeImage(id: number, imageId: number): Promise<TodoImage[]> {
+    const next = (await readImages(id)).filter((i) => i.id !== imageId);
+    await storageSet(imgKey(id), next);
+    return next;
   },
 };

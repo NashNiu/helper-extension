@@ -2,12 +2,19 @@ import { apiFetch } from "../http";
 import { hasToken } from "../auth";
 import { localTodos } from "../local/todos";
 
+export interface TodoImage {
+  id: number;
+  url: string;       // 已登录 = Supabase 公开 URL;未登录 = dataUrl
+  sort_order: number;
+}
+
 export interface Todo {
   id: number;
   content: string;
   is_done: boolean;
   created_at: string;
   done_at: string | null;
+  images: TodoImage[];
 }
 
 function remoteCreate(content: string): Promise<Todo> {
