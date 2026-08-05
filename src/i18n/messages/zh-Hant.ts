@@ -130,7 +130,7 @@ export const zhHant: Record<keyof typeof en, string> = {
   "todo.pasteImage": "貼上圖片",
   "todo.fromClipboard": "從剪貼簿選",
   "todo.imageMax": "最多 {max} 張圖片",
-  "todo.imageTooLarge": "圖片過大（上限 5MB）",
+  "todo.imageTooLarge": "圖片過大（上限 25MB）",
   "todo.noImageInClipboard": "剪貼簿裡沒有圖片",
   "todo.imageAddFailed": "新增圖片失敗",
   "todo.viewImageAria": "檢視第 {n} 張圖片",

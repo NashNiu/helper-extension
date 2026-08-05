@@ -128,7 +128,7 @@ export const en = {
   "todo.pasteImage": "Paste image",
   "todo.fromClipboard": "From clipboard",
   "todo.imageMax": "At most {max} images",
-  "todo.imageTooLarge": "Image too large (5MB max)",
+  "todo.imageTooLarge": "Image too large (25MB max)",
   "todo.noImageInClipboard": "No image in the clipboard",
   "todo.imageAddFailed": "Failed to add image",
   "todo.viewImageAria": "View image {n}",

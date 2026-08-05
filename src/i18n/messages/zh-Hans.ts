@@ -130,7 +130,7 @@ export const zhHans: Record<keyof typeof en, string> = {
   "todo.pasteImage": "粘贴图片",
   "todo.fromClipboard": "从剪贴板选",
   "todo.imageMax": "最多 {max} 张图片",
-  "todo.imageTooLarge": "图片过大（上限 5MB）",
+  "todo.imageTooLarge": "图片过大（上限 25MB）",
   "todo.noImageInClipboard": "剪贴板里没有图片",
   "todo.imageAddFailed": "添加图片失败",
   "todo.viewImageAria": "查看第 {n} 张图片",
