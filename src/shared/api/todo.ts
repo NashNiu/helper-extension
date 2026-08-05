@@ -3,7 +3,10 @@ import { hasToken } from "../auth";
 import { localTodos } from "../local/todos";
 import { blobToDataUrl, MAX_TODO_IMAGES } from "../images";
 
-// 重新导出,让既有的 `from "../api/todo"` 导入路径不用改。
+// 在这里重新导出,是因为「待办图片数上限」属于待办 API 的对外接口,调用方应该能从
+// api/todo.ts 直接拿到它;常量本身却定义在 images.ts 里,是为了避开一个运行时循环
+// 依赖——api/todo.ts 以值的方式导入 localTodos,如果反过来在 api/todo.ts 里定义这个
+// 常量再被 local/todos.ts 当值导入,就会在两者之间闭合出一个真实的循环。
 export { MAX_TODO_IMAGES };
 
 export interface TodoImage {

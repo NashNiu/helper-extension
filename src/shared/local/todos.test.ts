@@ -6,7 +6,12 @@ function mockChrome() {
   (globalThis as any).chrome = {
     storage: {
       local: {
-        get: vi.fn(async (key: string) => ({ [key]: data[key] })),
+        get: vi.fn(async (keyOrKeys: string | string[]) => {
+          const keys = Array.isArray(keyOrKeys) ? keyOrKeys : [keyOrKeys];
+          const out: Record<string, unknown> = {};
+          for (const k of keys) out[k] = data[k];
+          return out;
+        }),
         set: vi.fn(async (obj: Record<string, unknown>) => {
           Object.assign(data, obj);
         }),
@@ -52,6 +57,15 @@ describe("localTodos 图片", () => {
     const three = await localTodos.addImages(t.id, ["data:a", "data:b", "data:c"]);
     const left = await localTodos.removeImage(t.id, three[1].id);
     expect(left.map((i) => i.url)).toEqual(["data:a", "data:c"]);
+  });
+
+  it("removeImage 删掉最后一张图片后,连 todoImg 键本身都不留下", async () => {
+    const t = await localTodos.create("修 bug");
+    const [only] = await localTodos.addImages(t.id, ["data:a"]);
+    expect(Object.keys(data).some((k) => k.includes("todoImg"))).toBe(true);
+    const left = await localTodos.removeImage(t.id, only.id);
+    expect(left).toEqual([]);
+    expect(Object.keys(data).some((k) => k.includes("todoImg"))).toBe(false);
   });
 
   it("已完成列表同样 hydrate 图片", async () => {

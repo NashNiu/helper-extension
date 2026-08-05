@@ -1,6 +1,6 @@
 import type { Todo, TodoImage } from "../api/todo";
 import { readList, writeList, nextId } from "./store";
-import { storageGet, storageSet, storageRemove } from "../storage";
+import { storageGet, storageGetMany, storageSet, storageRemove } from "../storage";
 import { MAX_TODO_IMAGES } from "../images";
 
 const KEY = "helper.local.todos";
@@ -21,9 +21,18 @@ async function readImages(todoId: number): Promise<TodoImage[]> {
   return (await storageGet<TodoImage[]>(imgKey(todoId))) ?? [];
 }
 
-/** 给一页待办补上各自的图片。缺键的待办得到空数组,兼容没有图片的旧数据。 */
+/**
+ * 给一页待办补上各自的图片。缺键的待办得到空数组,兼容没有图片的旧数据。
+ *
+ * 一次 storageGetMany 批量读全部图片键,而不是每条待办各发一次 chrome.storage.local.get——
+ * 未登录用户翻一页待办列表本来就要走这里,逐条读会让每页固定付 10 次 IPC,哪怕这页
+ * 一张图片都没有(比如个人中心的已完成历史,从不展示图片)。
+ */
 async function hydrate(list: Todo[]): Promise<Todo[]> {
-  return Promise.all(list.map(async (t) => ({ ...t, images: await readImages(t.id) })));
+  if (list.length === 0) return list;
+  const keys = list.map((t) => imgKey(t.id));
+  const images = await storageGetMany<TodoImage[]>(keys);
+  return list.map((t) => ({ ...t, images: images[imgKey(t.id)] ?? [] }));
 }
 
 // 与后端一致:按创建时间倒序(新在前),同刻按 id 倒序。
@@ -118,7 +127,13 @@ export const localTodos = {
 
   async removeImage(id: number, imageId: number): Promise<TodoImage[]> {
     const next = (await readImages(id)).filter((i) => i.id !== imageId);
-    await storageSet(imgKey(id), next);
+    // 删完之后一张不剩就把整个键删掉,而不是留一个 `[]`——留着不影响读取(缺键本来就
+    // 归一成 []),但会在 DevTools 里显示成一个空的 todoImg 键,看着像级联删除漏了一步。
+    if (next.length === 0) {
+      await storageRemove(imgKey(id));
+    } else {
+      await storageSet(imgKey(id), next);
+    }
     return next;
   },
 };

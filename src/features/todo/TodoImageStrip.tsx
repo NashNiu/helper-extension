@@ -24,8 +24,12 @@ export function TodoImageStrip({
   onRemove?: (imageId: number) => void;
 }) {
   const t = useT();
+  // 存图片的 id 而不是它在 sorted 里的下标——下标在图片被删除后会指向别的图片,
+  // 甚至指向不存在的位置(数组变短),导致 sorted[preview] 在渲染期抛错(见本文件的
+  // 修复记录)。存 id 后,预览的图片被删掉时 shown 自然找不到,预览随之自己关闭。
   const [preview, setPreview] = useState<number | null>(null);
   const sorted = [...images].sort((a, b) => a.sort_order - b.sort_order);
+  const shown = sorted.find((x) => x.id === preview);
 
   // 预览打开时按 Esc 关闭。
   useEffect(() => {
@@ -46,7 +50,7 @@ export function TodoImageStrip({
           <div key={img.id} className="relative">
             <button
               type="button"
-              onClick={() => setPreview(i)}
+              onClick={() => setPreview(img.id)}
               aria-label={t("todo.viewImageAria", { n: i + 1 })}
               className="block h-10 w-10 overflow-hidden rounded-md border border-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
             >
@@ -66,16 +70,16 @@ export function TodoImageStrip({
         ))}
       </div>
 
-      {preview !== null && (
+      {shown && (
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={t("todo.closePreview")}
+          aria-label={t("todo.imagePreviewAria")}
           onClick={() => setPreview(null)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
         >
           <img
-            src={sorted[preview].url}
+            src={shown.url}
             alt=""
             className="max-h-full max-w-full object-contain"
           />

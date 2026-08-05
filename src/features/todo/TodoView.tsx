@@ -7,8 +7,7 @@ import { useT } from "../../i18n/react";
 import { TodoImageStrip } from "./TodoImageStrip";
 import { ClipboardImagePicker } from "./ClipboardImagePicker";
 import { MAX_TODO_IMAGES } from "../../shared/api/todo";
-import { downscale } from "../../shared/images";
-import { MAX_IMAGE_BYTES } from "../../shared/clipboardStore";
+import { downscale, MAX_PASTE_IMAGE_BYTES } from "../../shared/images";
 
 const iconBtn =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-black/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40";
@@ -116,8 +115,10 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
   /**
    * 从系统剪贴板取一张图并附加到待办。
    *
-   * 流程:读剪贴板 → 找 image/* → 5MB 前置拦截(降采样前,避免把超大图解码进内存)
-   * → 降采样 → 上传/存本地。navigator.clipboard.read() 需要面板有焦点,失败时给明确提示。
+   * 流程:读剪贴板 → 找 image/* → 25MB 前置拦截(降采样前,避免把超大图解码进内存;
+   * 这个上限比剪贴板板的 5MB 宽得多,见 shared/images.ts 里 MAX_PASTE_IMAGE_BYTES
+   * 的注释)→ 降采样 → 上传/存本地。navigator.clipboard.read() 需要面板有焦点,
+   * 失败时给明确提示。
    */
   async function pasteImage(t: Todo) {
     if (t.images.length >= MAX_TODO_IMAGES) {
@@ -139,7 +140,7 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
         setErr(tr("todo.noImageInClipboard"));
         return;
       }
-      if (blob.size > MAX_IMAGE_BYTES) {
+      if (blob.size > MAX_PASTE_IMAGE_BYTES) {
         setErr(tr("todo.imageTooLarge"));
         return;
       }
