@@ -4,6 +4,10 @@ import { Input } from "../../components/Input";
 import { Loading } from "../../components/Loading";
 import { useInfiniteList } from "../../shared/useInfiniteList";
 import { useT } from "../../i18n/react";
+import { TodoImageStrip } from "./TodoImageStrip";
+import { ClipboardImagePicker } from "./ClipboardImagePicker";
+import { MAX_TODO_IMAGES } from "../../shared/api/todo";
+import { downscale, MAX_PASTE_IMAGE_BYTES } from "../../shared/images";
 
 const iconBtn =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-black/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40";
@@ -58,6 +62,8 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
+  const [busyImageId, setBusyImageId] = useState<number | null>(null);
+  const [pickingFor, setPickingFor] = useState<number | null>(null);
 
   // 列表只含未完成项，勾选即标记完成并从列表移除。
   async function complete(t: Todo) {
@@ -106,6 +112,90 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
     }
   }
 
+  /**
+   * 从系统剪贴板取一张图并附加到待办。
+   *
+   * 流程:读剪贴板 → 找 image/* → 25MB 前置拦截(降采样前,避免把超大图解码进内存;
+   * 这个上限比剪贴板板的 5MB 宽得多,见 shared/images.ts 里 MAX_PASTE_IMAGE_BYTES
+   * 的注释)→ 降采样 → 上传/存本地。navigator.clipboard.read() 需要面板有焦点,
+   * 失败时给明确提示。
+   */
+  async function pasteImage(t: Todo) {
+    if (t.images.length >= MAX_TODO_IMAGES) {
+      setErr(tr("todo.imageMax", { max: MAX_TODO_IMAGES }));
+      return;
+    }
+    setBusyImageId(t.id);
+    try {
+      const clipItems = await navigator.clipboard.read();
+      let blob: Blob | null = null;
+      for (const ci of clipItems) {
+        const imgType = ci.types.find((ty) => ty.startsWith("image/"));
+        if (imgType) {
+          blob = await ci.getType(imgType);
+          break;
+        }
+      }
+      if (!blob) {
+        setErr(tr("todo.noImageInClipboard"));
+        return;
+      }
+      if (blob.size > MAX_PASTE_IMAGE_BYTES) {
+        setErr(tr("todo.imageTooLarge"));
+        return;
+      }
+      const small = await downscale(blob);
+      const images = await todoApi.addImages(t.id, [small]);
+      setItems((xs) => xs.map((x) => (x.id === t.id ? { ...x, images } : x)));
+      setErr("");
+    } catch {
+      setErr(tr("todo.imageAddFailed"));
+    } finally {
+      setBusyImageId(null);
+    }
+  }
+
+  /** 从剪贴板板选中一张:dataUrl → Blob → 走与粘贴完全相同的降采样与上传路径。 */
+  async function attachFromClipboard(todoId: number, dataUrl: string) {
+    setPickingFor(null);
+    const t = items.find((x) => x.id === todoId);
+    if (!t) return;
+    if (t.images.length >= MAX_TODO_IMAGES) {
+      setErr(tr("todo.imageMax", { max: MAX_TODO_IMAGES }));
+      return;
+    }
+    setBusyImageId(todoId);
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      const small = await downscale(blob);
+      const images = await todoApi.addImages(todoId, [small]);
+      setItems((xs) => xs.map((x) => (x.id === todoId ? { ...x, images } : x)));
+      setErr("");
+    } catch {
+      setErr(tr("todo.imageAddFailed"));
+    } finally {
+      setBusyImageId(null);
+    }
+  }
+
+  /**
+   * 删掉一张图。todoApi.removeImage 返回 void(后端 DELETE 端点没有响应体),
+   * 所以这里自己从本地状态过滤掉该 id,而不是等一个新列表回来。
+   */
+  async function dropImage(t: Todo, imageId: number) {
+    try {
+      await todoApi.removeImage(t.id, imageId);
+      setItems((xs) =>
+        xs.map((x) =>
+          x.id === t.id ? { ...x, images: x.images.filter((i) => i.id !== imageId) } : x,
+        ),
+      );
+      setErr("");
+    } catch {
+      setErr(tr("err.deleteFailed"));
+    }
+  }
+
   // 后端已按 done=false 过滤；这里再兜底一次，兼容尚未部署该过滤的后端。
   const visible = items.filter((t) => !t.is_done);
 
@@ -125,47 +215,75 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
           {visible.map((t) => {
             const editing = editingId === t.id;
             return (
-              <li key={t.id} className="flex items-center gap-2 border-b border-line px-4 py-3">
-                <input
-                  type="checkbox"
-                  checked={false}
-                  onChange={() => complete(t)}
-                  disabled={editing}
-                  className="h-4 w-4 shrink-0 accent-accent disabled:opacity-40"
-                  aria-label={tr("todo.completeAria", { content: t.content })}
-                />
+              <li key={t.id} className="border-b border-line px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={() => complete(t)}
+                    disabled={editing}
+                    className="h-4 w-4 shrink-0 accent-accent disabled:opacity-40"
+                    aria-label={tr("todo.completeAria", { content: t.content })}
+                  />
+                  {editing ? (
+                    <>
+                      <Input
+                        autoFocus
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") void saveEdit(t);
+                          else if (e.key === "Escape") cancelEdit();
+                        }}
+                        className="min-w-0 flex-1 py-1"
+                        aria-label={tr("todo.editAria")}
+                      />
+                      <button onClick={() => void saveEdit(t)} aria-label={tr("action.save")} className={iconBtnAccent}>
+                        <CheckIcon />
+                      </button>
+                      <button onClick={cancelEdit} aria-label={tr("action.cancel")} className={iconBtn}>
+                        <XIcon />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="min-w-0 flex-1 break-words text-sm leading-relaxed text-ink">
+                        {t.content}
+                      </span>
+                      <button onClick={() => startEdit(t)} aria-label={tr("action.edit")} title={tr("action.edit")} className={iconBtn}>
+                        <PencilIcon />
+                      </button>
+                      <button onClick={() => remove(t.id)} aria-label={tr("action.delete")} title={tr("action.delete")} className={iconBtnDanger}>
+                        <TrashIcon />
+                      </button>
+                    </>
+                  )}
+                </div>
+
                 {editing ? (
-                  <>
-                    <Input
-                      autoFocus
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") void saveEdit(t);
-                        else if (e.key === "Escape") cancelEdit();
-                      }}
-                      className="min-w-0 flex-1 py-1"
-                      aria-label={tr("todo.editAria")}
-                    />
-                    <button onClick={() => void saveEdit(t)} aria-label={tr("action.save")} className={iconBtnAccent}>
-                      <CheckIcon />
+                  <div className="mt-2 pl-6">
+                    <button
+                      type="button"
+                      onClick={() => void pasteImage(t)}
+                      disabled={busyImageId === t.id}
+                      className="rounded-lg border border-line px-2 py-1 text-xs text-muted transition hover:border-accent hover:text-ink disabled:opacity-40"
+                    >
+                      {tr("todo.pasteImage")}
                     </button>
-                    <button onClick={cancelEdit} aria-label={tr("action.cancel")} className={iconBtn}>
-                      <XIcon />
+                    <button
+                      type="button"
+                      onClick={() => setPickingFor(t.id)}
+                      disabled={busyImageId === t.id}
+                      className="ml-1.5 rounded-lg border border-line px-2 py-1 text-xs text-muted transition hover:border-accent hover:text-ink disabled:opacity-40"
+                    >
+                      {tr("todo.fromClipboard")}
                     </button>
-                  </>
+                    <TodoImageStrip images={t.images} onRemove={(imgId) => void dropImage(t, imgId)} />
+                  </div>
                 ) : (
-                  <>
-                    <span className="min-w-0 flex-1 break-words text-sm leading-relaxed text-ink">
-                      {t.content}
-                    </span>
-                    <button onClick={() => startEdit(t)} aria-label={tr("action.edit")} title={tr("action.edit")} className={iconBtn}>
-                      <PencilIcon />
-                    </button>
-                    <button onClick={() => remove(t.id)} aria-label={tr("action.delete")} title={tr("action.delete")} className={iconBtnDanger}>
-                      <TrashIcon />
-                    </button>
-                  </>
+                  <div className="pl-6">
+                    <TodoImageStrip images={t.images} />
+                  </div>
                 )}
               </li>
             );
@@ -174,6 +292,12 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
       )}
       {hasMore && <div ref={sentinelRef} aria-hidden="true" className="h-px" />}
       {loadingMore && <p className="py-3 text-center text-xs text-muted">{tr("common.loading")}</p>}
+      {pickingFor !== null && (
+        <ClipboardImagePicker
+          onPick={(dataUrl) => void attachFromClipboard(pickingFor, dataUrl)}
+          onClose={() => setPickingFor(null)}
+        />
+      )}
     </>
   );
 }
