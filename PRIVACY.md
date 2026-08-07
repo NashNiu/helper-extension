@@ -30,8 +30,9 @@ If you never sign in, no content is sent to our server and everything remains lo
 
 ## 3. Permissions and why we request them
 
-- **storage / unlimitedStorage** — save your to‑dos, reminders, timers, and clipboard items locally.
+- **storage / unlimitedStorage** — save your to‑dos, reminders, timers, clipboard items, and any images you attach to a to‑do locally.
 - **alarms / notifications** — schedule reminders and timers and show a desktop notification when they are due.
+- **offscreen** — play a short chime when a reminder or timer is due. Manifest V3 service workers have no DOM and therefore cannot use the Web Audio API, so an offscreen document is the only supported way to play a sound from the background. It plays a locally generated tone only: it loads no remote content, reads no page data, and makes no network requests.
 - **sidePanel** — run the app as a browser side panel.
 - **contextMenus** — provide a right‑click "save image" option for the clipboard feature.
 - **clipboardRead** — used only when you click the "add from clipboard" button inside the panel, to read the item you want to save.
@@ -99,8 +100,9 @@ Questions or data‑deletion requests: **niutengfei123@gmail.com**
 
 ## 3. 权限及用途
 
-- **storage / unlimitedStorage** —— 在本地保存你的待办、提醒、计时和剪贴板条目。
+- **storage / unlimitedStorage** —— 在本地保存你的待办、提醒、计时、剪贴板条目,以及你为待办附加的图片。
 - **alarms / notifications** —— 安排提醒与计时,并在到点时弹出桌面通知。
+- **offscreen** —— 在提醒或计时到点时播放一段短提示音。Manifest V3 的 service worker 没有 DOM,无法使用 Web Audio API,离屏文档是后台播放声音的唯一受支持方式。它只播放本地合成的音调:不加载远程内容、不读取页面数据、不发起任何网络请求。
 - **sidePanel** —— 以浏览器侧边栏形式运行本应用。
 - **contextMenus** —— 提供右键"保存图片"到剪贴板收藏的功能。
 - **clipboardRead** —— 仅在你点击面板内"从剪贴板添加"按钮时读取你要保存的内容。
