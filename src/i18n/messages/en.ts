@@ -151,6 +151,7 @@ export const en = {
   "login.failed": "Sign in failed",
 
   "notify.reminderTitle": "Reminder",
+  "notify.todoRemindTitle": "Todo",
   "notify.timeUp": "Time's up",
   "notify.timerEnded": "\"{name}\" finished",
   "notify.breakTitle": "Time for a break",

@@ -153,6 +153,7 @@ export const zhHant: Record<keyof typeof en, string> = {
   "login.failed": "登入失敗",
 
   "notify.reminderTitle": "提醒",
+  "notify.todoRemindTitle": "待辦",
   "notify.timeUp": "時間到",
   "notify.timerEnded": "「{name}」已結束",
   "notify.breakTitle": "該休息了",
