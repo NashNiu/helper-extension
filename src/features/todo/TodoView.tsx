@@ -8,6 +8,7 @@ import { TodoImageStrip } from "./TodoImageStrip";
 import { ClipboardImagePicker } from "./ClipboardImagePicker";
 import { MAX_TODO_IMAGES } from "../../shared/api/todo";
 import { downscale, MAX_PASTE_IMAGE_BYTES } from "../../shared/images";
+import { formatDateTime } from "../../shared/datetime";
 
 const iconBtn =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-black/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40";
@@ -15,6 +16,15 @@ const iconBtnDanger =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-danger/10 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40";
 const iconBtnAccent =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-accent transition hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40";
+
+// datetime-local 控件要的是本地时间字符串 YYYY-MM-DDTHH:mm，不是 ISO(UTC)。
+function toLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
 function PencilIcon() {
   return (
@@ -62,6 +72,7 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
+  const [remindDraft, setRemindDraft] = useState("");
   const [busyImageId, setBusyImageId] = useState<number | null>(null);
   const [pickingFor, setPickingFor] = useState<number | null>(null);
 
@@ -89,22 +100,33 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
   function startEdit(t: Todo) {
     setEditingId(t.id);
     setDraft(t.content);
+    setRemindDraft(toLocalInput(t.remind_at));
   }
 
   function cancelEdit() {
     setEditingId(null);
     setDraft("");
+    setRemindDraft("");
   }
 
   async function saveEdit(t: Todo) {
     const content = draft.trim();
-    if (!content || content === t.content) {
+    const beforeLocal = toLocalInput(t.remind_at);
+    const remindChanged = remindDraft !== beforeLocal;
+    if ((!content || content === t.content) && !remindChanged) {
       cancelEdit();
       return;
     }
     try {
-      await todoApi.update(t.id, { content });
-      setItems((xs) => xs.map((x) => (x.id === t.id ? { ...x, content } : x)));
+      // 只在真的变了时才带 remind_at——否则改内容会把 remind_triggered 重置，
+      // 一条已经弹过的提醒会莫名其妙复活。
+      const updated = await todoApi.update(t.id, {
+        ...(content && content !== t.content ? { content } : {}),
+        ...(remindChanged
+          ? { remind_at: remindDraft ? new Date(remindDraft).toISOString() : null }
+          : {}),
+      });
+      setItems((xs) => xs.map((x) => (x.id === t.id ? updated : x)));
       cancelEdit();
       setErr("");
     } catch {
@@ -278,10 +300,36 @@ export function TodoView({ refreshKey }: { refreshKey: number }) {
                     >
                       {tr("todo.fromClipboard")}
                     </button>
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <span className="shrink-0 text-xs text-muted">
+                        {tr("todo.remindLabel")}
+                      </span>
+                      <input
+                        type="datetime-local"
+                        value={remindDraft}
+                        onChange={(e) => setRemindDraft(e.target.value)}
+                        aria-label={tr("todo.remindLabel")}
+                        className="min-w-0 flex-1 rounded-lg border border-line bg-transparent px-2 py-1 text-xs text-ink"
+                      />
+                      {remindDraft && (
+                        <button
+                          type="button"
+                          onClick={() => setRemindDraft("")}
+                          className="shrink-0 text-xs text-muted transition hover:text-danger"
+                        >
+                          {tr("todo.clearRemind")}
+                        </button>
+                      )}
+                    </div>
                     <TodoImageStrip images={t.images} onRemove={(imgId) => void dropImage(t, imgId)} />
                   </div>
                 ) : (
                   <div className="pl-6">
+                    {t.remind_at && (
+                      <p className="tabular-nums text-xs text-muted">
+                        ⏰ {formatDateTime(t.remind_at)}
+                      </p>
+                    )}
                     <TodoImageStrip images={t.images} />
                   </div>
                 )}
