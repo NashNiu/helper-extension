@@ -218,4 +218,17 @@ describe("localTodos — 提醒", () => {
     // 调度不需要图片：这个查询每分钟被心跳调一次，读 base64 是纯浪费
     expect(out[0].images).toEqual([]);
   });
+
+  it("同一次调用里既设提醒又勾完成，以完成为准", async () => {
+    const t = await localTodos.create("写周报");
+    const out = await localTodos.update(t.id, { remind_at: FUTURE, is_done: true });
+    expect(out.remind_triggered).toBe(true);
+  });
+
+  it("同一次调用里既设提醒又取消完成，以取消完成后的复活判断为准", async () => {
+    const t = await localTodos.create("写周报");
+    await localTodos.update(t.id, { is_done: true });
+    const out = await localTodos.update(t.id, { remind_at: FUTURE, is_done: false });
+    expect(out.remind_triggered).toBe(false);
+  });
 });
