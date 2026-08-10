@@ -22,6 +22,9 @@ export interface Todo {
   created_at: string;
   done_at: string | null;
   images: TodoImage[];
+  // 缺省视为 null / false，兼容本次之前存下的本地数据
+  remind_at: string | null;
+  remind_triggered: boolean;
 }
 
 // 后端返回的原始形状:图片字段叫 image_path,值是 Supabase 的完整公开 URL。
