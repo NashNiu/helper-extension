@@ -141,3 +141,94 @@ describe("localTodos 图片", () => {
     expect(after).toHaveLength(9);
   });
 });
+
+describe("localTodos — 提醒", () => {
+  const FUTURE = new Date(Date.now() + 3600_000).toISOString();
+  const PAST = new Date(Date.now() - 3600_000).toISOString();
+
+  // 复用文件顶部已有的 mockChrome()。每个用例一份全新存储,否则下面
+  // listRemindPending 的条数断言会被上一个用例留下的待办污染。
+  // 这个 mock 没有 chrome.alarms,而 scheduleAlarm/clearAlarm 都做了存在性判断,
+  // 所以本地存储层的用例不会因为闹钟缺席而炸。
+  beforeEach(() => {
+    mockChrome();
+  });
+
+  it("创建时可以带提醒时间", async () => {
+    const t = await localTodos.create("写周报", FUTURE);
+    expect(t.remind_at).toBe(FUTURE);
+    expect(t.remind_triggered).toBe(false);
+  });
+
+  it("创建时不带提醒则为 null", async () => {
+    const t = await localTodos.create("写周报");
+    expect(t.remind_at).toBeNull();
+    expect(t.remind_triggered).toBe(false);
+  });
+
+  it("改提醒时间会把 remind_triggered 置回 false", async () => {
+    const t = await localTodos.create("写周报", PAST);
+    await localTodos.markRemindTriggered(t.id);
+    const out = await localTodos.update(t.id, { remind_at: FUTURE });
+    expect(out.remind_at).toBe(FUTURE);
+    expect(out.remind_triggered).toBe(false);
+  });
+
+  it("清空提醒时间", async () => {
+    const t = await localTodos.create("写周报", FUTURE);
+    const out = await localTodos.update(t.id, { remind_at: null });
+    expect(out.remind_at).toBeNull();
+    expect(out.remind_triggered).toBe(false);
+  });
+
+  it("勾选完成会把 remind_triggered 置为 true", async () => {
+    const t = await localTodos.create("写周报", FUTURE);
+    const out = await localTodos.update(t.id, { is_done: true });
+    expect(out.remind_triggered).toBe(true);
+  });
+
+  it("取消完成时未来的提醒恢复，过去的不恢复", async () => {
+    const future = await localTodos.create("未来", FUTURE);
+    await localTodos.update(future.id, { is_done: true });
+    expect((await localTodos.update(future.id, { is_done: false })).remind_triggered).toBe(false);
+
+    const past = await localTodos.create("过去", PAST);
+    await localTodos.update(past.id, { is_done: true });
+    expect((await localTodos.update(past.id, { is_done: false })).remind_triggered).toBe(true);
+  });
+
+  it("listRemindPending 只返回未完成、设了提醒、未触发的，按时间正序", async () => {
+    const later = new Date(Date.now() + 7200_000).toISOString();
+    await localTodos.create("没提醒");
+    const a = await localTodos.create("晚的", later);
+    const b = await localTodos.create("早的", FUTURE);
+    const done = await localTodos.create("已完成", FUTURE);
+    await localTodos.update(done.id, { is_done: true });
+    const fired = await localTodos.create("已弹过", FUTURE);
+    await localTodos.markRemindTriggered(fired.id);
+
+    const out = await localTodos.listRemindPending();
+    expect(out.map((t) => t.id)).toEqual([b.id, a.id]);
+  });
+
+  it("listRemindPending 不读取图片键", async () => {
+    const t = await localTodos.create("带图", FUTURE);
+    await localTodos.addImages(t.id, ["data:image/png;base64,AAAA"]);
+    const out = await localTodos.listRemindPending();
+    // 调度不需要图片：这个查询每分钟被心跳调一次，读 base64 是纯浪费
+    expect(out[0].images).toEqual([]);
+  });
+
+  it("同一次调用里既设提醒又勾完成，以完成为准", async () => {
+    const t = await localTodos.create("写周报");
+    const out = await localTodos.update(t.id, { remind_at: FUTURE, is_done: true });
+    expect(out.remind_triggered).toBe(true);
+  });
+
+  it("同一次调用里既设提醒又取消完成，以取消完成后的复活判断为准", async () => {
+    const t = await localTodos.create("写周报");
+    await localTodos.update(t.id, { is_done: true });
+    const out = await localTodos.update(t.id, { remind_at: FUTURE, is_done: false });
+    expect(out.remind_triggered).toBe(false);
+  });
+});

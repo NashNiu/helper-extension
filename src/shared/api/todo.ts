@@ -22,6 +22,9 @@ export interface Todo {
   created_at: string;
   done_at: string | null;
   images: TodoImage[];
+  // 缺省视为 null / false，兼容本次之前存下的本地数据
+  remind_at: string | null;
+  remind_triggered: boolean;
 }
 
 // 后端返回的原始形状:图片字段叫 image_path,值是 Supabase 的完整公开 URL。
@@ -45,9 +48,10 @@ function fromRemote(t: RemoteTodo): Todo {
   };
 }
 
-async function remoteCreate(content: string): Promise<Todo> {
+async function remoteCreate(content: string, remindAt?: string): Promise<Todo> {
   const fd = new FormData();
   fd.append("content", content);
+  if (remindAt !== undefined) fd.append("remind_at", remindAt);
   return fromRemote(await apiFetch<RemoteTodo>("/api/todos", { method: "POST", body: fd }));
 }
 
@@ -70,9 +74,12 @@ export const todoApi = {
     (await hasToken())
       ? (await apiFetch<RemoteTodo[]>(`/api/todos?done=true&limit=${limit}&offset=${offset}`)).map(fromRemote)
       : localTodos.listDone(offset, limit),
-  create: async (content: string) =>
-    (await hasToken()) ? remoteCreate(content) : localTodos.create(content),
-  update: async (id: number, data: { content?: string; is_done?: boolean }) =>
+  create: async (content: string, remindAt?: string) =>
+    (await hasToken()) ? remoteCreate(content, remindAt) : localTodos.create(content, remindAt),
+  update: async (
+    id: number,
+    data: { content?: string; is_done?: boolean; remind_at?: string | null },
+  ) =>
     (await hasToken())
       ? fromRemote(await apiFetch<RemoteTodo>(`/api/todos/${id}`, { method: "PATCH", json: data }))
       : localTodos.update(id, data),
@@ -80,6 +87,23 @@ export const todoApi = {
     (await hasToken())
       ? apiFetch<void>(`/api/todos/${id}`, { method: "DELETE" })
       : localTodos.remove(id),
+
+  /**
+   * 调度用的列表:未完成、设了提醒、还没弹过的待办,按提醒时间正序,不带图片。
+   * 心跳每分钟调一次,所以两条路径都刻意避开图片——登录态是 URL(白传),
+   * 未登录态是 base64(白读)。
+   */
+  listRemindPending: async (): Promise<Todo[]> =>
+    (await hasToken())
+      ? (await apiFetch<RemoteTodo[]>("/api/todos?remind=pending")).map(fromRemote)
+      : localTodos.listRemindPending(),
+
+  markRemindTriggered: async (id: number): Promise<Todo> =>
+    (await hasToken())
+      ? fromRemote(
+          await apiFetch<RemoteTodo>(`/api/todos/${id}/remind-triggered`, { method: "PATCH" }),
+        )
+      : localTodos.markRemindTriggered(id),
 
   /**
    * 追加图片。传入的 blob 应当已经降采样过(调用方负责,见 shared/images.ts)。

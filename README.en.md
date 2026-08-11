@@ -18,10 +18,11 @@ A Chrome Side Panel extension: capture reminders, timers, todos, and clipboard s
 
 | Feature | Description |
 |---------|-------------|
-| Todo | Task list with pagination + infinite scroll |
+| Todo | Task list with pagination + infinite scroll; in edit mode attach images by pasting or picking from the clipboard board (up to 9 per todo, downscaled only if the long edge exceeds 1600px), thumbnails open a fullscreen preview |
 | Reminders | One-off reminders with a system notification on due; fired by background alarms |
 | Daily reminders | Create repeating reminders in natural language (e.g. "每天8点提醒我喝水" / "every day at 8am…"), notified at that time each day until deleted; managed in a dedicated section atop the Reminders tab |
-| Timer | Classic pomodoro cycles (work/break, long break every 4th), pause/resume/reset, estimated end, floating widget |
+| Timer | Classic pomodoro cycles (work/break, long break every 4th), pause/resume/reset, estimated end, floating widget; the toolbar icon badge shows the remaining minutes and the current phase (work / break / paused / awaiting) |
+| Due chime | Reminders and timers play a short locally synthesized chime on due (via an offscreen document), and the notification's own system sound is suppressed so the two don't overlap; can be turned off under Mine |
 | Clipboard | Save text/images, pin & search; right-click "save image", one-click "add from clipboard" in the panel |
 | Quick add | Natural-language input in the top bar. Default **local rule-based parsing** (Chinese + English, offline, zero backend) auto-routes to reminder / timer / todo; with your own **DeepSeek key** it switches to AI parsing (auto-falls back to local on failure) |
 | Mine | Open via the top-right gear to switch UI language, set your DeepSeek key, and view completed todos & past reminders (no login in this version) |
@@ -100,7 +101,8 @@ Extension pages `fetch` cross-origin directly via `host_permissions`, so no serv
 | `sidePanel` | Side panel UI |
 | `alarms` | Reminder / timer scheduling |
 | `notifications` | System notifications |
-| `storage` / `unlimitedStorage` | Local data (incl. clipboard images) |
+| `offscreen` | Due-time chime (MV3 service workers have no DOM, so no direct Web Audio) |
+| `storage` / `unlimitedStorage` | Local data (incl. clipboard images, to-do image attachments) |
 | `contextMenus` | Right-click "save image" to clipboard |
 | `clipboardRead` / `clipboardWrite` | "Add from clipboard" / "copy" inside the panel |
 | `host_permissions` | Backend domain (sync when signed in; not exposed in the current UI); `api.deepseek.com` (AI parsing once a key is set) |

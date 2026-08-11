@@ -129,6 +129,8 @@ export const zhHant: Record<keyof typeof en, string> = {
   "profile.clipboardSection": "剪貼簿",
   "todo.pasteImage": "貼上圖片",
   "todo.fromClipboard": "從剪貼簿選",
+  "todo.remindLabel": "提醒",
+  "todo.clearRemind": "清除",
   "todo.imageMax": "最多 {max} 張圖片",
   "todo.imageTooLarge": "圖片過大（上限 25MB）",
   "todo.noImageInClipboard": "剪貼簿裡沒有圖片",
@@ -153,6 +155,7 @@ export const zhHant: Record<keyof typeof en, string> = {
   "login.failed": "登入失敗",
 
   "notify.reminderTitle": "提醒",
+  "notify.todoRemindTitle": "待辦",
   "notify.timeUp": "時間到",
   "notify.timerEnded": "「{name}」已結束",
   "notify.breakTitle": "該休息了",

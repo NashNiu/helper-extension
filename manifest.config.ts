@@ -4,7 +4,7 @@ export default defineManifest({
   manifest_version: 3,
   name: "记得",
   description: "一句话搞定提醒、计时、待办与剪贴板",
-  version: "0.4.0",
+  version: "0.5.0",
   minimum_chrome_version: "114",
   icons: {
     "16": "icon-16.png",

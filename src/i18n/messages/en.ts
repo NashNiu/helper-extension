@@ -127,6 +127,8 @@ export const en = {
   "profile.clipboardSection": "Clipboard",
   "todo.pasteImage": "Paste image",
   "todo.fromClipboard": "From clipboard",
+  "todo.remindLabel": "Remind",
+  "todo.clearRemind": "Clear",
   "todo.imageMax": "At most {max} images",
   "todo.imageTooLarge": "Image too large (25MB max)",
   "todo.noImageInClipboard": "No image in the clipboard",
@@ -151,6 +153,7 @@ export const en = {
   "login.failed": "Sign in failed",
 
   "notify.reminderTitle": "Reminder",
+  "notify.todoRemindTitle": "Todo",
   "notify.timeUp": "Time's up",
   "notify.timerEnded": "\"{name}\" finished",
   "notify.breakTitle": "Time for a break",

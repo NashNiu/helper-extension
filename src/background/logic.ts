@@ -1,6 +1,8 @@
 import type { Reminder } from "../shared/api/reminder";
+import type { Todo } from "../shared/api/todo";
 
 export const REMINDER_ALARM_PREFIX = "reminder:";
+export const TODO_REMIND_ALARM_PREFIX = "todoRemind:";
 export const HEARTBEAT_ALARM = "heartbeat";
 export const TIMER_ALARM = "timer:done";
 
@@ -9,22 +11,76 @@ export interface ScheduleAction {
   toSchedule: { name: string; when: number }[];
 }
 
-export function planReminders(pending: Reminder[], now: number): ScheduleAction {
-  const dueNow: Reminder[] = [];
+interface TriggerSpec<T> {
+  prefix: string;
+  /** 返回 NaN 表示这项没有可用的时间，跳过。 */
+  getTime: (item: T) => number;
+  /** 已经不需要再触发了(已弹过 / 已完成)。 */
+  isFired: (item: T) => boolean;
+}
+
+/**
+ * 「哪些该现在弹、哪些该建闹钟」的通用规划。提醒与待办提醒共用。
+ *
+ * dueNow 不设过期窗口——过点多久都补弹一次。这与每日提醒和计时刻意不同
+ * (那两者有 5 分钟容差，见 DAILY_CATCHUP_TOLERANCE_MS)：一条到点提醒错过了
+ * 仍然是有用信息，而「八小时前该休息了」只是噪音。
+ */
+export function planTriggers<T extends { id: number }>(
+  items: T[],
+  spec: TriggerSpec<T>,
+  now: number,
+): { dueNow: T[]; toSchedule: { name: string; when: number }[] } {
+  const dueNow: T[] = [];
   const toSchedule: { name: string; when: number }[] = [];
-  for (const r of pending) {
-    if (r.is_triggered) continue;
-    const when = Date.parse(r.trigger_at);
+  for (const item of items) {
+    if (spec.isFired(item)) continue;
+    const when = spec.getTime(item);
     if (Number.isNaN(when)) continue;
-    if (when <= now) dueNow.push(r);
-    else toSchedule.push({ name: `${REMINDER_ALARM_PREFIX}${r.id}`, when });
+    if (when <= now) dueNow.push(item);
+    else toSchedule.push({ name: `${spec.prefix}${item.id}`, when });
   }
   return { dueNow, toSchedule };
+}
+
+export function planReminders(pending: Reminder[], now: number): ScheduleAction {
+  return planTriggers(
+    pending,
+    {
+      prefix: REMINDER_ALARM_PREFIX,
+      getTime: (r) => Date.parse(r.trigger_at),
+      isFired: (r) => r.is_triggered,
+    },
+    now,
+  );
+}
+
+export function planTodoReminders(
+  pending: Todo[],
+  now: number,
+): { dueNow: Todo[]; toSchedule: { name: string; when: number }[] } {
+  return planTriggers(
+    pending,
+    {
+      prefix: TODO_REMIND_ALARM_PREFIX,
+      // 已完成也算「不必再触发」：列表理论上已过滤，但心跳拿到的是缓存/离线数据时
+      // 这道判断是最后一关，不能只信调用方。
+      getTime: (t) => (t.remind_at ? Date.parse(t.remind_at) : NaN),
+      isFired: (t) => t.is_done || t.remind_triggered,
+    },
+    now,
+  );
 }
 
 export function reminderIdFromAlarm(name: string): number | null {
   if (!name.startsWith(REMINDER_ALARM_PREFIX)) return null;
   const id = Number(name.slice(REMINDER_ALARM_PREFIX.length));
+  return Number.isInteger(id) ? id : null;
+}
+
+export function todoRemindIdFromAlarm(name: string): number | null {
+  if (!name.startsWith(TODO_REMIND_ALARM_PREFIX)) return null;
+  const id = Number(name.slice(TODO_REMIND_ALARM_PREFIX.length));
   return Number.isInteger(id) ? id : null;
 }
 
