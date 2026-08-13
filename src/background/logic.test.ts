@@ -391,6 +391,7 @@ function todo(over: Partial<Todo> = {}): Todo {
     images: [],
     remind_at: null,
     remind_triggered: false,
+    category_id: null,
     ...over,
   };
 }
