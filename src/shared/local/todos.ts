@@ -23,6 +23,26 @@ async function readImages(todoId: number): Promise<TodoImage[]> {
 }
 
 /**
+ * 分类筛选的三态:undefined = 不筛,'none' = 只要未分类,数字 = 只要该分类。
+ * 与后端 TodoService.findAll 的 categoryId 参数同语义。
+ */
+export type CategoryFilter = number | "none";
+
+/**
+ * 本次改动之前存下的待办没有 category_id 字段,读出来是 undefined。
+ * 统一归一成 null,否则老数据既进不了「未分类」的筛选结果,类型上也在说谎。
+ */
+function categoryOf(t: Todo): number | null {
+  return t.category_id ?? null;
+}
+
+function matchesCategory(t: Todo, filter?: CategoryFilter): boolean {
+  if (filter === undefined) return true;
+  const id = categoryOf(t);
+  return filter === "none" ? id === null : id === filter;
+}
+
+/**
  * 给一页待办补上各自的图片。缺键的待办得到空数组,兼容没有图片的旧数据。
  *
  * 一次 storageGetMany 批量读全部图片键,而不是每条待办各发一次 chrome.storage.local.get——
@@ -33,7 +53,11 @@ async function hydrate(list: Todo[]): Promise<Todo[]> {
   if (list.length === 0) return list;
   const keys = list.map((t) => imgKey(t.id));
   const images = await storageGetMany<TodoImage[]>(keys);
-  return list.map((t) => ({ ...t, images: images[imgKey(t.id)] ?? [] }));
+  return list.map((t) => ({
+    ...t,
+    images: images[imgKey(t.id)] ?? [],
+    category_id: categoryOf(t),
+  }));
 }
 
 // 与后端一致:按创建时间倒序(新在前),同刻按 id 倒序。
@@ -76,9 +100,11 @@ function byRemindAsc(a: Todo, b: Todo): number {
 }
 
 export const localTodos = {
-  async listActive(offset = 0, limit = 10): Promise<Todo[]> {
+  async listActive(offset = 0, limit = 10, category?: CategoryFilter): Promise<Todo[]> {
+    // 先筛后分页,与后端把 category_id 放进 where、再 take/skip 的顺序一致。
+    // 反过来的话每页都会少几条,越翻越对不上。
     const all = (await readList<Todo>(KEY))
-      .filter((t) => !t.is_done)
+      .filter((t) => !t.is_done && matchesCategory(t, category))
       .sort(byCreatedDesc);
     return hydrate(all.slice(offset, offset + limit));
   },
@@ -90,7 +116,7 @@ export const localTodos = {
     return hydrate(all.slice(offset, offset + limit));
   },
 
-  async create(content: string, remindAt?: string): Promise<Todo> {
+  async create(content: string, remindAt?: string, categoryId?: number | null): Promise<Todo> {
     const list = await readList<Todo>(KEY);
     const todo: Todo = {
       id: nextId(list),
@@ -100,6 +126,7 @@ export const localTodos = {
       done_at: null,
       remind_at: remindAt ?? null,
       remind_triggered: false,
+      category_id: categoryId ?? null,
       // 主列表里的 images 只是占位值(新建待办确实没有图片)。它不是图片数据的来源——
       // 真实数据始终在 helper.local.todoImg.<id> 键里;hydrate()/update() 读取时都会
       // 用 readImages() 重新取一遍,不会信任这里存的值。
@@ -112,7 +139,12 @@ export const localTodos = {
 
   async update(
     id: number,
-    data: { content?: string; is_done?: boolean; remind_at?: string | null },
+    data: {
+      content?: string;
+      is_done?: boolean;
+      remind_at?: string | null;
+      category_id?: number | null;
+    },
   ): Promise<Todo> {
     const list = await readList<Todo>(KEY);
     const idx = list.findIndex((t) => t.id === id);
@@ -123,7 +155,10 @@ export const localTodos = {
       images: cur.images ?? [],
       remind_at: cur.remind_at ?? null,
       remind_triggered: cur.remind_triggered ?? false,
+      category_id: categoryOf(cur),
       ...(data.content !== undefined ? { content: data.content } : {}),
+      // 与 remind_at 一样的三态:缺省 = 不变,null = 清空,数字 = 改分类。
+      ...(data.category_id !== undefined ? { category_id: data.category_id } : {}),
     };
 
     // 未登录时这里就是后端。以下四条规则必须与 backend/src/todo/todo.service.ts
@@ -186,7 +221,21 @@ export const localTodos = {
     return (await readList<Todo>(KEY))
       .filter((t) => !t.is_done && !t.remind_triggered && !!t.remind_at)
       .sort(byRemindAsc)
-      .map((t) => ({ ...t, images: [] }));
+      .map((t) => ({ ...t, images: [], category_id: categoryOf(t) }));
+  },
+
+  /**
+   * 把所有引用某分类的待办置为未分类。删分类时由 localTodoCategories.remove 调用,
+   * 对应后端的 onDelete: 'SET NULL'。刻意做成一次全表重写而不是逐条 update:
+   * update 会顺带重排闹钟并重读图片键,而改分类跟提醒、图片都不相干。
+   */
+  async clearCategory(categoryId: number): Promise<void> {
+    const list = await readList<Todo>(KEY);
+    if (!list.some((t) => categoryOf(t) === categoryId)) return;
+    await writeList(
+      KEY,
+      list.map((t) => (categoryOf(t) === categoryId ? { ...t, category_id: null } : t)),
+    );
   },
 
   async addImages(id: number, dataUrls: string[]): Promise<TodoImage[]> {

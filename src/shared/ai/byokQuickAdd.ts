@@ -12,6 +12,8 @@ import { todoApi } from "../api/todo";
 export function makeByokQuickAddDeps(
   key: string,
   now: () => Date = () => new Date(),
+  /** 面板上当前选中的待办分类;产出待办时带上,提醒不受影响。 */
+  categoryId?: number | null,
 ): QuickAddDeps {
   let cache: { input: string; items: AnalyzedItem[] } | null = null;
   async function ensure(input: string): Promise<AnalyzedItem[]> {
@@ -35,7 +37,11 @@ export function makeByokQuickAddDeps(
     createTodo: async (input: string) => {
       const items = await ensure(input);
       const it = items.find((x) => x.type === "todo");
-      await todoApi.create(it && it.type === "todo" ? it.content : input);
+      await todoApi.create(
+        it && it.type === "todo" ? it.content : input,
+        undefined,
+        categoryId,
+      );
     },
   };
 }

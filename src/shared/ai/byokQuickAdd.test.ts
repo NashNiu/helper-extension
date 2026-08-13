@@ -32,12 +32,22 @@ describe("makeByokQuickAddDeps", () => {
     await deps.createTodo("提醒交房租，记个待办买菜");
     expect(analyzeMock).toHaveBeenCalledTimes(1);
     expect(createManual).toHaveBeenCalledWith({ message: "交房租", trigger_at: "2026-07-08T01:00:00.000Z" });
-    expect(todoCreate).toHaveBeenCalledWith("买菜");
+    // 尾部两个 undefined 是 remind_at 与 category_id：没选分类时就是「不带」。
+    expect(todoCreate).toHaveBeenCalledWith("买菜", undefined, undefined);
   });
 
   it("propagates AiError from classify", async () => {
     analyzeMock.mockRejectedValue(new AiError("auth"));
     const deps = makeByokQuickAddDeps("k", now);
     await expect(deps.classify("x")).rejects.toBeInstanceOf(AiError);
+  });
+
+  // 面板上选中某个分类时，AI 路径产出的待办也要落进那个分类——
+  // 否则同一句话在配了 Key 和没配 Key 时会进不同的地方。
+  it("createTodo 把选中的分类带上", async () => {
+    analyzeMock.mockResolvedValue([{ type: "todo", content: "买菜" }]);
+    const deps = makeByokQuickAddDeps("k", now, 7);
+    await deps.createTodo("记个待办买菜");
+    expect(todoCreate).toHaveBeenCalledWith("买菜", undefined, 7);
   });
 });

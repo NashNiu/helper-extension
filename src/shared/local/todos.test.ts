@@ -232,3 +232,78 @@ describe("localTodos — 提醒", () => {
     expect(out.remind_triggered).toBe(false);
   });
 });
+
+describe("localTodos — 分类", () => {
+  beforeEach(() => {
+    mockChrome();
+  });
+
+  it("创建时不带分类则为 null", async () => {
+    const t = await localTodos.create("写周报");
+    expect(t.category_id).toBeNull();
+  });
+
+  it("创建时可以带分类", async () => {
+    const t = await localTodos.create("写周报", undefined, 3);
+    expect(t.category_id).toBe(3);
+  });
+
+  it("update 可以给待办改分类", async () => {
+    const t = await localTodos.create("写周报");
+    const out = await localTodos.update(t.id, { category_id: 5 });
+    expect(out.category_id).toBe(5);
+  });
+
+  it("update 传 null 清空分类", async () => {
+    const t = await localTodos.create("写周报", undefined, 5);
+    const out = await localTodos.update(t.id, { category_id: null });
+    expect(out.category_id).toBeNull();
+  });
+
+  // 与 remind_at 同样的三态语义：缺省 = 不变，别把它当成「清空」。
+  it("update 不传 category_id 时分类保持不变", async () => {
+    const t = await localTodos.create("写周报", undefined, 5);
+    const out = await localTodos.update(t.id, { content: "写月报" });
+    expect(out.category_id).toBe(5);
+  });
+
+  it("listActive 按分类过滤", async () => {
+    await localTodos.create("写周报", undefined, 1);
+    await localTodos.create("写月报", undefined, 1);
+    await localTodos.create("买牛奶", undefined, 2);
+
+    const got = await localTodos.listActive(0, 10, 1);
+    expect(got.map((t) => t.content)).toEqual(["写月报", "写周报"]);
+  });
+
+  it("listActive 的 'none' 只返回未分类的待办", async () => {
+    await localTodos.create("写周报", undefined, 1);
+    await localTodos.create("买牛奶");
+
+    const got = await localTodos.listActive(0, 10, "none");
+    expect(got.map((t) => t.content)).toEqual(["买牛奶"]);
+  });
+
+  // 本次改动之前存下的待办没有 category_id 字段，读出来是 undefined。
+  // 归一成 null 之后才能被「未分类」筛选命中，否则老数据会从列表里凭空消失。
+  it("旧数据缺 category_id 字段时按未分类处理", async () => {
+    await chrome.storage.local.set({
+      "helper.local.todos": [
+        { id: 1, content: "老待办", is_done: false, created_at: new Date().toISOString(), done_at: null, images: [] },
+      ],
+    });
+
+    const got = await localTodos.listActive(0, 10, "none");
+    expect(got.map((t) => t.content)).toEqual(["老待办"]);
+    expect(got[0].category_id).toBeNull();
+  });
+
+  it("分页在过滤之后生效", async () => {
+    await localTodos.create("a", undefined, 1);
+    await localTodos.create("b", undefined, 2);
+    await localTodos.create("c", undefined, 1);
+
+    const got = await localTodos.listActive(0, 1, 1);
+    expect(got.map((t) => t.content)).toEqual(["c"]);
+  });
+});
