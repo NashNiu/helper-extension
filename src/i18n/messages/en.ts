@@ -189,6 +189,8 @@ export const en = {
   "clip.groupEarlier": "Earlier",
   "clip.empty": "Nothing copied yet",
   "clip.noMatch": "No matching items",
+  "clip.expand": "Show full text",
+  "clip.collapse": "Show less",
   "clip.sourceManual": "Manual",
   "clip.copyTitle": "Copy again",
   "clip.pinTitle": "Pin",

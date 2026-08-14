@@ -106,6 +106,30 @@ function Card({
 }) {
   const srcLabel = it.source === "manual" || it.source === "" ? t("clip.sourceManual") : it.source;
   const srcClass = it.source === "manual" || it.source === "" ? "text-[#9a7d5c] font-semibold" : "text-accent-ink font-semibold";
+  const [expanded, setExpanded] = useState(false);
+  const [clamped, setClamped] = useState(false);
+  const textRef = useRef<HTMLParagraphElement | null>(null);
+
+  // 「展开」只在文本真的被截断时才出现。刻意用实测而不是按字数猜:侧边栏宽度是
+  // 用户可以拖的,同样的字数在窄面板会截断、拖宽后就放得下,任何字数阈值两边都会错。
+  useEffect(() => {
+    const el = textRef.current;
+    if (!el) return;
+    const measure = () => {
+      // 展开态下 clamp 已解除,量不出「本来会不会被截断」,保留上一次的判断;
+      // 收起时这个 effect 会因为 expanded 变化重跑,那时再重新量。
+      if (expanded) return;
+      // +1 容差:scrollHeight 与 clientHeight 常有亚像素舍入差,直接比会误判成截断。
+      setClamped(el.scrollHeight > el.clientHeight + 1);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    // 拖宽面板后原本放不下的文本可能已经放得下,那个「展开」就该消失。
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [it.text, expanded]);
+
   return (
     <div className="relative flex gap-2.5 rounded-xl border border-line bg-surface px-3 py-2.5">
       {it.pinned && (
@@ -120,7 +144,43 @@ function Card({
         {it.type === "image" ? (
           <img src={it.dataUrl} alt="" className="block max-h-[130px] w-full rounded-lg border border-line object-cover" />
         ) : (
-          <p className="line-clamp-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-ink">{it.text}</p>
+          // 定位容器故意套在 <p> 外面:收起态的 <p> 是 -webkit-box(line-clamp 的实现),
+          // 绝对定位的子元素在这种盒子里行为不可靠。
+          <div className="relative">
+            {/* 展开后封顶 + 内部滚动:不封顶的话一条几千字的剪贴会把后面所有条目顶出视野。 */}
+            <p
+              ref={textRef}
+              className={`whitespace-pre-wrap break-words text-sm leading-relaxed text-ink ${
+                expanded ? "max-h-[40vh] overflow-y-auto" : "line-clamp-3"
+              }`}
+            >
+              {it.text}
+              {/* 展开态没有 clamp,按钮直接跟在正文后面,自然落在最后一行末尾。 */}
+              {expanded && (
+                <button
+                  type="button"
+                  onClick={() => setExpanded(false)}
+                  className="ml-1.5 text-[11.5px] font-semibold text-accent-ink transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                >
+                  {t("clip.collapse")}
+                </button>
+              )}
+            </p>
+            {/* 收起态只能盖在第三行末尾:inline 放进 <p> 会被 clamp 一起裁掉。
+                左侧渐变是为了不让按钮硬生生切断半个字。 */}
+            {clamped && !expanded && (
+              <span className="absolute bottom-0 right-0 flex items-end">
+                <span aria-hidden="true" className="h-full w-8 bg-gradient-to-r from-transparent to-surface" />
+                <button
+                  type="button"
+                  onClick={() => setExpanded(true)}
+                  className="bg-surface text-[11.5px] font-semibold leading-relaxed text-accent-ink transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                >
+                  {t("clip.expand")}
+                </button>
+              </span>
+            )}
+          </div>
         )}
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11.5px] text-muted">
           <span className={srcClass}>{srcLabel}</span>

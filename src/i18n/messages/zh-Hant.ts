@@ -191,6 +191,8 @@ export const zhHant: Record<keyof typeof en, string> = {
   "clip.groupEarlier": "更早",
   "clip.empty": "還沒有複製記錄",
   "clip.noMatch": "沒有符合的記錄",
+  "clip.expand": "展開全文",
+  "clip.collapse": "收合",
   "clip.sourceManual": "手動",
   "clip.copyTitle": "重新複製",
   "clip.pinTitle": "置頂",

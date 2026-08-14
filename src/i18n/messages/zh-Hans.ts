@@ -191,6 +191,8 @@ export const zhHans: Record<keyof typeof en, string> = {
   "clip.groupEarlier": "更早",
   "clip.empty": "还没有复制记录",
   "clip.noMatch": "没有匹配的记录",
+  "clip.expand": "展开全文",
+  "clip.collapse": "收起",
   "clip.sourceManual": "手动",
   "clip.copyTitle": "重新复制",
   "clip.pinTitle": "置顶",
