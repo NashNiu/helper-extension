@@ -44,7 +44,14 @@ function CheckIcon() {
   );
 }
 
-export function QuickAddBar({ onAdded }: { onAdded: () => void }) {
+export function QuickAddBar({
+  onAdded,
+  /** 面板上当前选中的待办分类;产出待办时归入它,提醒不受影响。 */
+  categoryId = null,
+}: {
+  onAdded: () => void;
+  categoryId?: number | null;
+}) {
   const t = useT();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -70,10 +77,14 @@ export function QuickAddBar({ onAdded }: { onAdded: () => void }) {
     return () => { alive = false; chrome.storage.onChanged.removeListener(onChanged); };
   }, []);
 
-  const localDeps = useMemo<QuickAddDeps>(() => makeLocalQuickAddDeps(), []);
+  // 分类进依赖数组:切换分类后再提交,新建的待办要落进新选的分类。
+  const localDeps = useMemo<QuickAddDeps>(
+    () => makeLocalQuickAddDeps(undefined, categoryId),
+    [categoryId],
+  );
   const aiDeps = useMemo<QuickAddDeps | null>(
-    () => (key ? makeByokQuickAddDeps(key) : null),
-    [key],
+    () => (key ? makeByokQuickAddDeps(key, undefined, categoryId) : null),
+    [key, categoryId],
   );
 
   async function submit() {

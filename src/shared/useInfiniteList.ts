@@ -3,7 +3,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 /**
  * 通用「分页 + 触底加载更多」列表 hook。
  *
- * - 首屏加载第 0 页；`refreshKey` 变化时重置回第 0 页。
+ * - 首屏加载第 0 页；`refreshKey` 变化时重置回第 0 页。它是 string | number 而不是
+ *   number，是为了让调用方能把「筛选条件」一起编进这个键（例如 `${key}:${分类}`）。
+ *   刻意不改成依赖 fetchPage 的身份：ProfileView 传的是内联箭头函数，每次渲染都是
+ *   新引用，那样会无限重载。
  * - 以「当前已加载条数」作为下一页 offset，天然兼容乐观删除/完成后条目减少的场景，
  *   不会漏取也不会重取。
  * - 追加时按 id 去重：即便后端尚未支持 limit/offset（旧版会忽略参数返回全部），
@@ -12,7 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
  */
 export function useInfiniteList<T extends { id: number }>(
   fetchPage: (offset: number, limit: number) => Promise<T[]>,
-  refreshKey: number,
+  refreshKey: string | number,
   pageSize = 10,
   /** 为 false 时不加载(用于未激活的分段,切到时再拉首屏)。 */
   enabled = true,

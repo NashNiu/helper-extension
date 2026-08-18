@@ -11,8 +11,12 @@ import {
   isDailyFireMissed,
   planDailyAlarms,
   planTimerAlarm,
+  TODO_REMIND_ALARM_PREFIX,
+  planTodoReminders,
+  todoRemindIdFromAlarm,
 } from "./logic";
 import { reminderApi } from "../shared/api/reminder";
+import { todoApi } from "../shared/api/todo";
 import { getActiveTimer, setActiveTimer, ACTIVE_TIMER_KEY } from "../shared/activeTimer";
 import { translate } from "../i18n/core";
 import { currentLocale } from "../shared/locale";
@@ -78,6 +82,25 @@ async function fireReminder(reminderId: number) {
   }
 }
 
+async function fireTodoRemind(todoId: number) {
+  // listRemindPending 按登录态分流:登录读后端,未登录读本地。两种模式都要能触发。
+  try {
+    const pending = await todoApi.listRemindPending();
+    const t = pending.find((x) => x.id === todoId);
+    if (!t) return; // 已被删除/完成/触发
+    const loc = await currentLocale();
+    await notify(
+      `${TODO_REMIND_ALARM_PREFIX}${t.id}`,
+      translate(loc, "notify.todoRemindTitle"),
+      t.content,
+      "reminder",
+    );
+    await todoApi.markRemindTriggered(t.id);
+  } catch (e) {
+    console.error("fireTodoRemind failed", e);
+  }
+}
+
 async function runHeartbeat() {
   try {
     const pending = await reminderApi.listPending(0, SCHEDULE_LIMIT);
@@ -88,6 +111,22 @@ async function runHeartbeat() {
       await reminderApi.markTriggered(r.id);
     }
     for (const s of toSchedule) {
+      chrome.alarms.create(s.name, { when: s.when });
+    }
+    // 待办提醒。放在同一个 try 内:离线时上面的 listPending 已经抛了,这里不会执行;
+    // 而 finally 里的计时自愈与徒标刷新照常跑。
+    const pendingTodos = await todoApi.listRemindPending();
+    const todoPlan = planTodoReminders(pendingTodos, Date.now());
+    for (const t of todoPlan.dueNow) {
+      await notify(
+        `${TODO_REMIND_ALARM_PREFIX}${t.id}`,
+        translate(loc, "notify.todoRemindTitle"),
+        t.content,
+        "reminder",
+      );
+      await todoApi.markRemindTriggered(t.id);
+    }
+    for (const s of todoPlan.toSchedule) {
       chrome.alarms.create(s.name, { when: s.when });
     }
     await syncDailyAlarms();
@@ -237,6 +276,11 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   const did = dailyIdFromAlarm(alarm.name);
   if (did !== null) {
     void fireDaily(did, alarm.scheduledTime);
+    return;
+  }
+  const tid = todoRemindIdFromAlarm(alarm.name);
+  if (tid !== null) {
+    void fireTodoRemind(tid);
     return;
   }
   const rid = reminderIdFromAlarm(alarm.name);

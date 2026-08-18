@@ -373,3 +373,82 @@ describe("planTimerAlarm", () => {
     expect(TIMER_CATCHUP_TOLERANCE_MS).toBe(DAILY_CATCHUP_TOLERANCE_MS);
   });
 });
+
+import {
+  TODO_REMIND_ALARM_PREFIX,
+  planTodoReminders,
+  todoRemindIdFromAlarm,
+} from "./logic";
+import type { Todo } from "../shared/api/todo";
+
+function todo(over: Partial<Todo> = {}): Todo {
+  return {
+    id: 1,
+    content: "写周报",
+    is_done: false,
+    created_at: "2026-08-10T00:00:00.000Z",
+    done_at: null,
+    images: [],
+    remind_at: null,
+    remind_triggered: false,
+    category_id: null,
+    ...over,
+  };
+}
+
+describe("planTodoReminders", () => {
+  const now = Date.parse("2026-08-10T12:00:00.000Z");
+
+  it("已到点的进 dueNow", () => {
+    const t = todo({ id: 3, remind_at: "2026-08-10T11:59:00.000Z" });
+    const { dueNow, toSchedule } = planTodoReminders([t], now);
+    expect(dueNow.map((x) => x.id)).toEqual([3]);
+    expect(toSchedule).toEqual([]);
+  });
+
+  it("未到点的进 toSchedule，闹钟名带 todoRemind 前缀", () => {
+    const t = todo({ id: 4, remind_at: "2026-08-10T12:30:00.000Z" });
+    const { dueNow, toSchedule } = planTodoReminders([t], now);
+    expect(dueNow).toEqual([]);
+    expect(toSchedule).toEqual([
+      { name: "todoRemind:4", when: Date.parse("2026-08-10T12:30:00.000Z") },
+    ]);
+  });
+
+  it("已触发的跳过", () => {
+    const t = todo({ remind_at: "2026-08-10T11:00:00.000Z", remind_triggered: true });
+    expect(planTodoReminders([t], now)).toEqual({ dueNow: [], toSchedule: [] });
+  });
+
+  it("已完成的跳过（哪怕还没弹过）", () => {
+    const t = todo({ remind_at: "2026-08-10T11:00:00.000Z", is_done: true });
+    expect(planTodoReminders([t], now)).toEqual({ dueNow: [], toSchedule: [] });
+  });
+
+  it("没设提醒的跳过", () => {
+    expect(planTodoReminders([todo()], now)).toEqual({ dueNow: [], toSchedule: [] });
+  });
+
+  it("时间字符串不合法的跳过", () => {
+    const t = todo({ remind_at: "不是时间" });
+    expect(planTodoReminders([t], now)).toEqual({ dueNow: [], toSchedule: [] });
+  });
+});
+
+describe("todoRemindIdFromAlarm", () => {
+  it("解析自己的闹钟名", () => {
+    expect(todoRemindIdFromAlarm("todoRemind:12")).toBe(12);
+  });
+
+  it("不认别人的闹钟名", () => {
+    expect(todoRemindIdFromAlarm("reminder:12")).toBeNull();
+    expect(todoRemindIdFromAlarm("daily:12")).toBeNull();
+    expect(todoRemindIdFromAlarm("timer:done")).toBeNull();
+  });
+
+  it("前缀不与 reminder: 互相误命中", () => {
+    // "todoRemind:" 不以 "reminder:" 开头，两个 startsWith 判断互不干扰
+    expect(reminderIdFromAlarm("todoRemind:12")).toBeNull();
+    expect(TODO_REMIND_ALARM_PREFIX.startsWith("reminder:")).toBe(false);
+  });
+});
