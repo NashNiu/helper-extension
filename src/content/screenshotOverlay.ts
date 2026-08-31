@@ -10,6 +10,7 @@ interface Live {
   host: HTMLElement;
   prevOverflow: string;
   onKey: (e: KeyboardEvent) => void;
+  onWindowMouseUp: (e: MouseEvent) => void;
 }
 
 let live: Live | null = null;
@@ -17,6 +18,7 @@ let live: Live | null = null;
 export function hideOverlay(): void {
   if (!live) return;
   document.removeEventListener("keydown", live.onKey, true);
+  window.removeEventListener("mouseup", live.onWindowMouseUp);
   live.host.remove();
   document.documentElement.style.overflow = live.prevOverflow;
   live = null;
@@ -88,6 +90,29 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     size.textContent = `${r.w} × ${r.h}`;
   }
 
+  // 结束拖拽的公共逻辑:既被 surface 自身的 mouseup 调用,也被下面 window 级的
+  // 兜底监听调用。「先判空、再置空 start、才使用它」保证两边都收到同一次松开时
+  // 不会被处理两次——第二次进来 start 已经是 null,直接短路。
+  function endDrag(clientX: number, clientY: number): void {
+    if (!start) return;
+    const r = normalizeRect(start.x, start.y, clientX, clientY);
+    start = null;
+    if (isTooSmall(r)) {
+      hideOverlay(); // 点一下不拖 = 想取消
+      return;
+    }
+    // 记下发起这次拷贝时「当前」是哪个覆盖层:copy 是异步的,等它跑完时用户可能
+    // 已经又触发了一次截图,live 换成了新的覆盖层。这里只能拆自己发起时的那个,
+    // 不能无脑拆「此刻的」live,否则会把刚出现的新覆盖层拆掉。
+    const mine = live;
+    // 不在这里算缩放比:真正的比例要拿解码后的位图宽度才知道,由 copy 内部计算。
+    void copy(dataUrl, r)
+      .catch(() => {}) // 失败也要拆除;结果提示留给 Task 8,这里先吞掉避免出现未处理的 rejection
+      .finally(() => {
+        if (live === mine) hideOverlay();
+      });
+  }
+
   surface.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return; // 右键留给取消
     start = { x: e.clientX, y: e.clientY };
@@ -99,17 +124,15 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     paint(normalizeRect(start.x, start.y, e.clientX, e.clientY));
   });
 
-  surface.addEventListener("mouseup", (e) => {
-    if (!start) return;
-    const r = normalizeRect(start.x, start.y, e.clientX, e.clientY);
-    start = null;
-    if (isTooSmall(r)) {
-      hideOverlay(); // 点一下不拖 = 想取消
-      return;
-    }
-    // 不在这里算缩放比:真正的比例要拿解码后的位图宽度才知道,由 copy 内部计算。
-    void copy(dataUrl, r).finally(() => hideOverlay());
-  });
+  surface.addEventListener("mouseup", (e) => endDrag(e.clientX, e.clientY));
+
+  // 松开鼠标时光标可能已经在浏览器窗口外(标签栏、系统菜单、另一块屏幕):那样
+  // surface 收不到 mouseup,start 会一直挂着,鼠标回到页面内时选框会在没按键的
+  // 情况下跟着光标继续漂移。用 window 兜底保证拖拽总有个终点。原生鼠标事件默认
+  // composed,会从 surface 冒泡穿过 shadow 边界到 window,所以两边都能收到同一次
+  // 松开——由 endDrag 的判空顺序保证不会被处理两次。
+  const onWindowMouseUp = (e: MouseEvent) => endDrag(e.clientX, e.clientY);
+  window.addEventListener("mouseup", onWindowMouseUp);
 
   surface.addEventListener("contextmenu", (e) => {
     e.preventDefault();
@@ -128,7 +151,7 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   const prevOverflow = document.documentElement.style.overflow;
   document.documentElement.style.overflow = "hidden";
   document.documentElement.appendChild(host);
-  live = { host, prevOverflow, onKey };
+  live = { host, prevOverflow, onKey, onWindowMouseUp };
 }
 
 /** 真实的裁剪 + 写剪贴板。结果提示在 Task 8 补上。 */
