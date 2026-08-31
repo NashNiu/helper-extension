@@ -1,6 +1,9 @@
 import { defineManifest } from "@crxjs/vite-plugin";
 
-export default defineManifest({
+// crxjs 的 ManifestV3 类型不包含 optional_host_permissions（这是合法的 MV3 字段）。
+// 为了在保留其他字段的完整类型检查下支持该字段，用 satisfies 校验已知字段，
+// 然后用交叉类型补充 optional_host_permissions。
+const manifest = {
   manifest_version: 3,
   name: "记得",
   description: "一句话搞定提醒、计时、待办与剪贴板",
@@ -49,4 +52,21 @@ export default defineManifest({
       description: "Take a screenshot",
     },
   },
-} as any);
+} satisfies {
+  manifest_version: number;
+  name: string;
+  description: string;
+  version: string;
+  minimum_chrome_version: string;
+  icons: Record<string, string>;
+  action: object;
+  background: object;
+  side_panel: object;
+  content_scripts: object[];
+  permissions: string[];
+  host_permissions: string[];
+  optional_host_permissions: string[];
+  commands: object;
+};
+
+export default defineManifest(manifest);
