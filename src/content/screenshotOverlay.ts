@@ -1,5 +1,7 @@
 import { normalizeRect, isTooSmall, toBitmapRect, type Rect } from "../shared/capture/rect";
 import { SHOW_OVERLAY, type ShowOverlayMsg } from "../shared/capture/messages";
+import { translate } from "../i18n/core";
+import { currentLocale } from "../shared/locale";
 
 export const OVERLAY_ID = "helper-shot-overlay";
 
@@ -22,6 +24,37 @@ export function hideOverlay(): void {
   live.host.remove();
   document.documentElement.style.overflow = live.prevOverflow;
   live = null;
+}
+
+export const TOAST_ID = "helper-shot-toast";
+const TOAST_MS = 2000;
+
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** 页内轻提示。同样用 Shadow DOM 隔离,并且始终只保留一个,避免连点叠成一摞。 */
+export function showToast(text: string, ok: boolean): void {
+  document.getElementById(TOAST_ID)?.remove();
+  if (toastTimer) clearTimeout(toastTimer);
+
+  const host = document.createElement("div");
+  host.id = TOAST_ID;
+  host.style.cssText =
+    "all: initial; position: fixed; left: 0; right: 0; bottom: 32px; z-index: 2147483647; pointer-events: none;";
+  const root = host.attachShadow({ mode: "open" });
+  const bg = ok ? "rgba(20, 20, 20, 0.88)" : "rgba(178, 38, 38, 0.94)";
+  root.innerHTML = `
+    <div style="display:flex;justify-content:center;">
+      <span style="padding:8px 14px;border-radius:999px;background:${bg};color:#fff;
+                   font:13px system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.25);"></span>
+    </div>
+  `;
+  // 用 textContent 而不是拼进模板串:文案来自 i18n,不该走 HTML 解析。
+  root.querySelector("span")!.textContent = text;
+  document.documentElement.appendChild(host);
+  toastTimer = setTimeout(() => {
+    document.getElementById(TOAST_ID)?.remove();
+    toastTimer = null;
+  }, TOAST_MS);
 }
 
 /**
@@ -154,27 +187,35 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   live = { host, prevOverflow, onKey, onWindowMouseUp };
 }
 
-/** 真实的裁剪 + 写剪贴板。结果提示在 Task 8 补上。 */
+/** 真实的裁剪 + 写剪贴板,并把结果(成功/失败)用 toast 告诉用户。 */
 export async function copyRegion(dataUrl: string, r: Rect): Promise<void> {
-  const res = await fetch(dataUrl);
-  const bmp = await createImageBitmap(await res.blob());
+  const loc = await currentLocale();
   try {
-    // 实测比例:多屏/页面缩放/系统缩放下 devicePixelRatio 与真实截图尺寸对不上。
-    const scale = window.innerWidth > 0 ? bmp.width / window.innerWidth : 1;
-    const b = toBitmapRect(r, scale, bmp.width, bmp.height);
-    if (b.w === 0 || b.h === 0) return; // 选区完全落在图外,当取消
-    const canvas = document.createElement("canvas");
-    canvas.width = b.w;
-    canvas.height = b.h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("2d context unavailable");
-    ctx.drawImage(bmp, b.x, b.y, b.w, b.h, 0, 0, b.w, b.h);
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-    if (!blob) throw new Error("toBlob returned null");
-    // 只能写 image/png:Chrome 的 ClipboardItem 只稳定支持这一种图片类型。
-    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-  } finally {
-    bmp.close();
+    const res = await fetch(dataUrl);
+    const bmp = await createImageBitmap(await res.blob());
+    try {
+      // 实测比例:多屏/页面缩放/系统缩放下 devicePixelRatio 与真实截图尺寸对不上。
+      const scale = window.innerWidth > 0 ? bmp.width / window.innerWidth : 1;
+      const b = toBitmapRect(r, scale, bmp.width, bmp.height);
+      if (b.w === 0 || b.h === 0) return; // 选区完全落在图外,当取消,不提示
+      const canvas = document.createElement("canvas");
+      canvas.width = b.w;
+      canvas.height = b.h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("2d context unavailable");
+      ctx.drawImage(bmp, b.x, b.y, b.w, b.h, 0, 0, b.w, b.h);
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!blob) throw new Error("toBlob returned null");
+      // 只能写 image/png:Chrome 的 ClipboardItem 只稳定支持这一种图片类型。
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      showToast(translate(loc, "shot.copied"), true);
+    } finally {
+      bmp.close();
+    }
+  } catch (e) {
+    // 最常见的原因是文档失焦——Clipboard API 要求文档处于聚焦态。
+    console.error("copyRegion failed", e);
+    showToast(translate(loc, "shot.copyFailed"), false);
   }
 }
 

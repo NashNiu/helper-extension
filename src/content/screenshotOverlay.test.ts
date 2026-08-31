@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { showOverlay, hideOverlay, OVERLAY_ID } from "./screenshotOverlay";
+import { showOverlay, hideOverlay, showToast, OVERLAY_ID, TOAST_ID } from "./screenshotOverlay";
 
 const DATA_URL = "data:image/png;base64,AAAA";
 
@@ -177,5 +177,27 @@ describe("screenshotOverlay", () => {
     // 已经是 null,应该被 endDrag 的判空短路掉)。
     window.dispatchEvent(new MouseEvent("mouseup", { clientX: 999, clientY: 999 }));
     expect(copy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("showToast", () => {
+  beforeEach(() => {
+    document.getElementById(TOAST_ID)?.remove();
+  });
+
+  it("显示后页面上出现 toast 节点", () => {
+    showToast("已复制", true);
+    expect(document.getElementById(TOAST_ID)).not.toBeNull();
+  });
+
+  it("连续两次只留一个，不会叠成一摞", () => {
+    showToast("已复制", true);
+    showToast("复制失败", false);
+    expect(document.querySelectorAll(`#${TOAST_ID}`).length).toBe(1);
+  });
+
+  it("文案写进节点里", () => {
+    showToast("复制失败", false);
+    expect(document.getElementById(TOAST_ID)!.shadowRoot!.textContent).toContain("复制失败");
   });
 });
