@@ -217,6 +217,18 @@ export const en = {
   "notepad.toggle": "Toggle notes",
   "notepad.addToClipboard": "Add to clipboard",
   "notepad.addedToClipboard": "Added to clipboard",
+  "shot.button": "Screenshot",
+  "shot.hint": "Drag to select an area. It will be copied to your clipboard.",
+  "shot.menuTitle": "Take a screenshot",
+  "shot.copied": "Screenshot copied to clipboard",
+  "shot.copyFailed": "Could not copy. Click the page, then try again.",
+  "shot.unsupportedPage": "Screenshots aren't available on this page.",
+  "shot.permissionDenied": "Permission denied. Use the keyboard shortcut or the page's right-click menu instead.",
+  "shot.settingsSection": "Screenshot",
+  "shot.entrySidePanel": "Button in the side panel",
+  "shot.entryContextMenu": "Page right-click menu",
+  "shot.entryShortcut": "Keyboard shortcut (Ctrl+Shift+S)",
+  "shot.shortcutHint": "Chrome does not allow unregistering a shortcut. Turning it off makes it do nothing; the key combination still appears on chrome://extensions/shortcuts.",
 } as const;
 
 export type MessageKey = keyof typeof en;
