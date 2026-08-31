@@ -1,5 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { showOverlay, hideOverlay, showToast, OVERLAY_ID, TOAST_ID } from "./screenshotOverlay";
+
+// currentLocale() 内部走 chrome.storage.local.get,扩展重载/更新时会抛
+// "Extension context invalidated"。mock 成始终拒绝,用来验证 copyRegion 在
+// 这种情况下依然能弹出结果 toast,而不是把异常一路抛出、被调用方的
+// .catch(() => {}) 悄悄吞掉。
+vi.mock("../shared/locale", () => ({
+  currentLocale: vi.fn(async () => {
+    throw new Error("Extension context invalidated");
+  }),
+}));
+
+import { showOverlay, hideOverlay, showToast, copyRegion, OVERLAY_ID, TOAST_ID } from "./screenshotOverlay";
 
 const DATA_URL = "data:image/png;base64,AAAA";
 
@@ -199,5 +210,45 @@ describe("showToast", () => {
   it("文案写进节点里", () => {
     showToast("复制失败", false);
     expect(document.getElementById(TOAST_ID)!.shadowRoot!.textContent).toContain("复制失败");
+  });
+});
+
+describe("copyRegion 在 currentLocale 失败时仍要给出结果提示", () => {
+  beforeEach(() => {
+    document.getElementById(TOAST_ID)?.remove();
+  });
+
+  it("扩展 context invalidated(currentLocale 拒绝)不应吞掉复制结果——退回英文文案也要弹出 toast", async () => {
+    // 逐个假造 copyRegion 真实实现要用到的浏览器 API:这个测试只关心
+    // 「currentLocale 拒绝之后,后续流程是否还能跑完并弹出 toast」,所以每个
+    // 依赖都给最简单的可用实现,不追求还原真实的图像处理细节。
+    const fakeBlob = new Blob(["x"]);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ blob: async () => fakeBlob }) as unknown as Response),
+    );
+    const fakeBitmap = { width: 100, height: 100, close: vi.fn() } as unknown as ImageBitmap;
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => fakeBitmap),
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((cb: BlobCallback) => cb(fakeBlob));
+    Object.defineProperty(navigator, "clipboard", {
+      value: { write: vi.fn(async () => {}) },
+      configurable: true,
+    });
+
+    await copyRegion(DATA_URL, { x: 0, y: 0, w: 50, h: 50 });
+
+    // 重点断言:即使 currentLocale() 抛了异常,copyRegion 也没有在到达任何一个
+    // showToast(...) 调用之前就整体 reject——toast 节点必须出现。
+    expect(document.getElementById(TOAST_ID)).not.toBeNull();
+    expect(fakeBitmap.close).toHaveBeenCalled(); // bmp.close() 在这条路径上也必须跑到
+
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 });

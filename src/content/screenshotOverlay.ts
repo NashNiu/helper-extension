@@ -1,6 +1,6 @@
 import { normalizeRect, isTooSmall, toBitmapRect, type Rect } from "../shared/capture/rect";
 import { SHOW_OVERLAY, type ShowOverlayMsg } from "../shared/capture/messages";
-import { translate } from "../i18n/core";
+import { translate, type Locale } from "../i18n/core";
 import { currentLocale } from "../shared/locale";
 
 export const OVERLAY_ID = "helper-shot-overlay";
@@ -189,7 +189,14 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
 
 /** 真实的裁剪 + 写剪贴板,并把结果(成功/失败)用 toast 告诉用户。 */
 export async function copyRegion(dataUrl: string, r: Rect): Promise<void> {
-  const loc = await currentLocale();
+  // 语言设置读取失败(最典型的是扩展重载/更新导致 context invalidated)不该拖累
+  // 后面的提示——退回英文也远好过一声不吭,这个函数存在的意义就是让用户知道结果。
+  let loc: Locale = "en";
+  try {
+    loc = await currentLocale();
+  } catch {
+    /* 忽略:上面已经决定了退回英文 */
+  }
   try {
     const res = await fetch(dataUrl);
     const bmp = await createImageBitmap(await res.blob());
