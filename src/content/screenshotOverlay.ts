@@ -1,2 +1,164 @@
-// 覆盖层实现见 Task 7。此刻只占位,让 manifest 里的声明有文件可指。
-export {};
+import { normalizeRect, isTooSmall, toBitmapRect, type Rect } from "../shared/capture/rect";
+import { SHOW_OVERLAY, type ShowOverlayMsg } from "../shared/capture/messages";
+
+export const OVERLAY_ID = "helper-shot-overlay";
+
+/** 裁剪 + 写系统剪贴板。抽成参数是为了在测试里替换掉 canvas 与剪贴板这两个不可测的依赖。 */
+export type CopyFn = (dataUrl: string, r: Rect) => Promise<void>;
+
+interface Live {
+  host: HTMLElement;
+  prevOverflow: string;
+  onKey: (e: KeyboardEvent) => void;
+}
+
+let live: Live | null = null;
+
+export function hideOverlay(): void {
+  if (!live) return;
+  document.removeEventListener("keydown", live.onKey, true);
+  live.host.remove();
+  document.documentElement.style.overflow = live.prevOverflow;
+  live = null;
+}
+
+/**
+ * 铺出冻结截图并进入框选。
+ *
+ * 底图是「已经截好的」可见区域,所以显示期间必须锁滚动:页面一滚,底图与真实内容
+ * 就错位,用户框到的和看到的不是一块地方。
+ *
+ * 用 Shadow DOM 装内容:页面自身的 CSS(尤其是 * 选择器和对 img/div 的全局规则)
+ * 会把覆盖层搅乱,shadow root 是唯一可靠的隔离手段。
+ */
+export function showOverlay(dataUrl: string, copy: CopyFn): void {
+  hideOverlay(); // 重复触发时先拆旧的,保证任意时刻只有一个覆盖层
+
+  const host = document.createElement("div");
+  host.id = OVERLAY_ID;
+  host.style.cssText = "all: initial; position: fixed; inset: 0; z-index: 2147483647;";
+  const root = host.attachShadow({ mode: "open" });
+
+  root.innerHTML = `
+    <style>
+      :host { all: initial; }
+      .surface {
+        position: fixed; inset: 0; cursor: crosshair; overflow: hidden;
+        background-size: 100% 100%; background-repeat: no-repeat;
+      }
+      .mask { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); }
+      .sel {
+        position: absolute; display: none; box-sizing: border-box;
+        border: 1px solid #fff; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+      }
+      .size {
+        position: absolute; display: none; padding: 2px 6px; border-radius: 4px;
+        background: rgba(0, 0, 0, 0.75); color: #fff; font: 12px system-ui, sans-serif;
+        white-space: nowrap; pointer-events: none;
+      }
+    </style>
+    <div class="surface" data-shot-surface>
+      <div class="mask" data-shot-mask></div>
+      <div class="sel" data-shot-sel></div>
+      <div class="size" data-shot-size></div>
+    </div>
+  `;
+
+  const surface = root.querySelector<HTMLElement>("[data-shot-surface]")!;
+  const mask = root.querySelector<HTMLElement>("[data-shot-mask]")!;
+  const sel = root.querySelector<HTMLElement>("[data-shot-sel]")!;
+  const size = root.querySelector<HTMLElement>("[data-shot-size]")!;
+  // 用 style 赋值而不是写进 innerHTML:dataUrl 很长,拼进模板串既难读又容易被
+  // 里面的引号打断。
+  surface.style.backgroundImage = `url("${dataUrl}")`;
+
+  let start: { x: number; y: number } | null = null;
+
+  function paint(r: Rect): void {
+    // 选区自己的 box-shadow 已经压暗四周了,两层遮罩叠加会过黑。
+    mask.style.display = "none";
+    sel.style.display = "block";
+    sel.style.left = `${r.x}px`;
+    sel.style.top = `${r.y}px`;
+    sel.style.width = `${r.w}px`;
+    sel.style.height = `${r.h}px`;
+    size.style.display = "block";
+    size.style.left = `${r.x}px`;
+    size.style.top = `${Math.max(0, r.y - 22)}px`;
+    size.textContent = `${r.w} × ${r.h}`;
+  }
+
+  surface.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return; // 右键留给取消
+    start = { x: e.clientX, y: e.clientY };
+    e.preventDefault();
+  });
+
+  surface.addEventListener("mousemove", (e) => {
+    if (!start) return;
+    paint(normalizeRect(start.x, start.y, e.clientX, e.clientY));
+  });
+
+  surface.addEventListener("mouseup", (e) => {
+    if (!start) return;
+    const r = normalizeRect(start.x, start.y, e.clientX, e.clientY);
+    start = null;
+    if (isTooSmall(r)) {
+      hideOverlay(); // 点一下不拖 = 想取消
+      return;
+    }
+    // 不在这里算缩放比:真正的比例要拿解码后的位图宽度才知道,由 copy 内部计算。
+    void copy(dataUrl, r).finally(() => hideOverlay());
+  });
+
+  surface.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    hideOverlay();
+  });
+
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      hideOverlay();
+    }
+  };
+  // 捕获阶段绑在 document 上:页面自己可能在冒泡阶段吞掉 Esc。
+  document.addEventListener("keydown", onKey, true);
+
+  const prevOverflow = document.documentElement.style.overflow;
+  document.documentElement.style.overflow = "hidden";
+  document.documentElement.appendChild(host);
+  live = { host, prevOverflow, onKey };
+}
+
+/** 真实的裁剪 + 写剪贴板。结果提示在 Task 8 补上。 */
+export async function copyRegion(dataUrl: string, r: Rect): Promise<void> {
+  const res = await fetch(dataUrl);
+  const bmp = await createImageBitmap(await res.blob());
+  try {
+    // 实测比例:多屏/页面缩放/系统缩放下 devicePixelRatio 与真实截图尺寸对不上。
+    const scale = window.innerWidth > 0 ? bmp.width / window.innerWidth : 1;
+    const b = toBitmapRect(r, scale, bmp.width, bmp.height);
+    if (b.w === 0 || b.h === 0) return; // 选区完全落在图外,当取消
+    const canvas = document.createElement("canvas");
+    canvas.width = b.w;
+    canvas.height = b.h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("2d context unavailable");
+    ctx.drawImage(bmp, b.x, b.y, b.w, b.h, 0, 0, b.w, b.h);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("toBlob returned null");
+    // 只能写 image/png:Chrome 的 ClipboardItem 只稳定支持这一种图片类型。
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+  } finally {
+    bmp.close();
+  }
+}
+
+// 加载期只注册一个监听器,别的什么都不做——这个脚本跑在每一个页面上。
+// 加 typeof 守卫是因为单测里会 import 这个模块,那里没有 chrome。
+if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
+  chrome.runtime.onMessage.addListener((msg: ShowOverlayMsg) => {
+    if (msg && msg.kind === SHOW_OVERLAY) showOverlay(msg.dataUrl, copyRegion);
+  });
+}
