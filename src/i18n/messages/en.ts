@@ -224,6 +224,7 @@ export const en = {
   "shot.copyFailed": "Could not copy. Click the page, then try again.",
   "shot.unsupportedPage": "Screenshots aren't available on this page.",
   "shot.permissionDenied": "Permission denied. Use the keyboard shortcut or the page's right-click menu instead.",
+  "shot.startFailed": "Couldn't start the screenshot. Please try again, or reopen the side panel.",
   "shot.settingsSection": "Screenshot",
   "shot.entrySidePanel": "Button in the side panel",
   "shot.entryContextMenu": "Page right-click menu",

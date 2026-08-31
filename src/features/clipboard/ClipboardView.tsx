@@ -283,7 +283,14 @@ export function ClipboardView({ refreshKey }: { refreshKey: number }) {
           return;
         }
         // 面板本身没有截图能力,让 SW 去截当前标签页。
-        return chrome.runtime.sendMessage(buildStartCapture());
+        // 权限已授予后,发送失败另有原因(SW 冷启动、扩展被重载等),
+        // 与"未授权"是不同的失败原因,不能复用同一条提示,否则会误导用户去重新授权。
+        // 沿用 clipboardCapture.ts 的 send() 先例:失败先延迟重试一次,仍失败才提示用户。
+        chrome.runtime.sendMessage(buildStartCapture()).catch(() => {
+          setTimeout(() => {
+            void chrome.runtime.sendMessage(buildStartCapture()).catch(() => flash(t("shot.startFailed")));
+          }, 150);
+        });
       })
       .catch(() => flash(t("shot.permissionDenied")));
   }, [flash, t]);

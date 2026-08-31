@@ -226,6 +226,7 @@ export const zhHans: Record<keyof typeof en, string> = {
   "shot.copyFailed": "复制失败，点一下页面再试一次",
   "shot.unsupportedPage": "当前页面不支持截图",
   "shot.permissionDenied": "未授权，请改用快捷键或页面右键菜单",
+  "shot.startFailed": "截图未能启动，请重试，或重新打开侧边栏",
   "shot.settingsSection": "截图",
   "shot.entrySidePanel": "侧边栏按钮",
   "shot.entryContextMenu": "页面右键菜单",

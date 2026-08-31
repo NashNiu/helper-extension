@@ -226,9 +226,10 @@ export const zhHant: Record<keyof typeof en, string> = {
   "shot.copyFailed": "複製失敗，點一下頁面再試一次",
   "shot.unsupportedPage": "目前頁面不支援截圖",
   "shot.permissionDenied": "未授權，請改用快速鍵或頁面右鍵選單",
+  "shot.startFailed": "螢幕截圖未能啟動，請重試，或重新開啟側邊欄",
   "shot.settingsSection": "截圖",
   "shot.entrySidePanel": "側邊欄按鈕",
   "shot.entryContextMenu": "頁面右鍵選單",
   "shot.entryShortcut": "鍵盤快速鍵（Ctrl+Shift+S）",
-  "shot.shortcutHint": "Chrome 不允許登出快速鍵。關掉後按鍵不再有反應，但組合鍵仍會列在 chrome://extensions/shortcuts 中。",
+  "shot.shortcutHint": "Chrome 不允許註銷快速鍵。關掉後按鍵不再有反應，但組合鍵仍會列在 chrome://extensions/shortcuts 中。",
 };

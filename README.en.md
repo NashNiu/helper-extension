@@ -24,6 +24,7 @@ A Chrome Side Panel extension: capture reminders, timers, todos, and clipboard s
 | Timer | Classic pomodoro cycles (work/break, long break every 4th), pause/resume/reset, estimated end, floating widget; the toolbar icon badge shows the remaining minutes and the current phase (work / break / paused / awaiting) |
 | Due chime | Reminders and timers play a short locally synthesized chime on due (via an offscreen document), and the notification's own system sound is suppressed so the two don't overlap; can be turned off under Mine |
 | Clipboard | Save text/images, pin & search; right-click "save image", one-click "add from clipboard" in the panel |
+| Screenshot | Three independently toggleable entry points in Mine — keyboard shortcut (Ctrl+Shift+S), page right-click menu, side panel button; freezes the page, drag to select an area, the crop is written straight to the system clipboard (not saved, never uploaded) |
 | Quick add | Natural-language input in the top bar. Default **local rule-based parsing** (Chinese + English, offline, zero backend) auto-routes to reminder / timer / todo; with your own **DeepSeek key** it switches to AI parsing (auto-falls back to local on failure) |
 | Mine | Open via the top-right gear to switch UI language, set your DeepSeek key, and view completed todos & past reminders (no login in this version) |
 
@@ -103,9 +104,12 @@ Extension pages `fetch` cross-origin directly via `host_permissions`, so no serv
 | `notifications` | System notifications |
 | `offscreen` | Due-time chime (MV3 service workers have no DOM, so no direct Web Audio) |
 | `storage` / `unlimitedStorage` | Local data (incl. clipboard images, to-do image attachments) |
-| `contextMenus` | Right-click "save image" to clipboard |
-| `clipboardRead` / `clipboardWrite` | "Add from clipboard" / "copy" inside the panel |
+| `contextMenus` | Right-click "save image" to clipboard; screenshot entry point |
+| `clipboardRead` / `clipboardWrite` | "Add from clipboard" / "copy" inside the panel; screenshot result is written to the system clipboard |
+| `activeTab` | Temporary access to the current tab when a screenshot is started via the shortcut or the page's right-click menu |
+| `commands` | The screenshot keyboard shortcut (Ctrl+Shift+S) |
 | `host_permissions` | Backend domain (sync when signed in; not exposed in the current UI); `api.deepseek.com` (AI parsing once a key is set) |
+| `optional_host_permissions` (`<all_urls>`) | Requested only when the side panel screenshot button is clicked (that entry has no `activeTab` gesture to rely on); revocable anytime from the extension's details page |
 
 ## Related
 
