@@ -2,8 +2,8 @@ import { translate } from "../i18n/core";
 import { currentLocale } from "../shared/locale";
 import { addItem, getSettings, MAX_IMAGE_BYTES } from "../shared/clipboardStore";
 import { CAPTURE_TEXT, hostnameOf, makeImageItem, makeTextItem, type CaptureTextMsg } from "../shared/clipboardMessage";
+import { CLIP_IMAGE_MENU_ID } from "./menus";
 
-const MENU_ID = "helper-clip-image";
 const ICON = "icon-128.png";
 
 // Blob → dataURL(SW 无 FileReader,用 arrayBuffer + btoa)。
@@ -55,7 +55,7 @@ async function saveImage(srcUrl: string, source: string): Promise<void> {
 
 // module top-level — registered once per SW lifetime, synchronously
 chrome.contextMenus.onClicked.addListener((info) => {
-  if (info.menuItemId === MENU_ID && info.srcUrl) {
+  if (info.menuItemId === CLIP_IMAGE_MENU_ID && info.srcUrl) {
     void saveImage(info.srcUrl, hostnameOf(info.pageUrl ?? ""));
   }
 });
@@ -69,14 +69,3 @@ async function handleCaptureText(msg: CaptureTextMsg): Promise<void> {
 chrome.runtime.onMessage.addListener((msg: CaptureTextMsg) => {
   if (msg && msg.kind === CAPTURE_TEXT) void handleCaptureText(msg);
 });
-
-export async function initClipboard(): Promise<void> {
-  const loc = await currentLocale();
-  chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({
-      id: MENU_ID,
-      title: translate(loc, "clip.menuSaveImage"),
-      contexts: ["image"],
-    });
-  });
-}
