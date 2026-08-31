@@ -15,6 +15,8 @@ import { Loading } from "../../components/Loading";
 import { useT } from "../../i18n/react";
 import type { MessageKey } from "../../i18n/messages/en";
 import { NotepadBox } from "./NotepadBox";
+import { getEntries } from "../../shared/captureSettings";
+import { buildStartCapture } from "../../shared/capture/messages";
 
 type Filter = "all" | "text" | "image";
 
@@ -67,6 +69,15 @@ function CopyIcon() {
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="9" y="9" width="12" height="12" rx="2" />
       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+function ShotIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 8V6a2 2 0 0 1 2-2h2M17 4h2a2 2 0 0 1 2 2v2M21 16v2a2 2 0 0 1-2 2h-2M7 20H5a2 2 0 0 1-2-2v-2" />
+      <circle cx="12" cy="12" r="3" />
     </svg>
   );
 }
@@ -255,6 +266,28 @@ export function ClipboardView({ refreshKey }: { refreshKey: number }) {
   }, []);
   useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
+  const [shotOn, setShotOn] = useState(false);
+
+  useEffect(() => {
+    void getEntries().then((e) => setShotOn(e.sidePanel));
+  }, []);
+
+  const onScreenshot = useCallback(() => {
+    // 必须同步发起权限申请:任何 await 都会消耗掉用户手势,弹窗就不会出现了。
+    // 侧边栏点击不算扩展手势拿不到 activeTab,所以这个入口只能靠用户授予的 <all_urls>。
+    chrome.permissions
+      .request({ origins: ["<all_urls>"] })
+      .then((granted) => {
+        if (!granted) {
+          flash(t("shot.permissionDenied"));
+          return;
+        }
+        // 面板本身没有截图能力,让 SW 去截当前标签页。
+        return chrome.runtime.sendMessage(buildStartCapture());
+      })
+      .catch(() => flash(t("shot.permissionDenied")));
+  }, [flash, t]);
+
   const onCopy = useCallback(
     async (it: ClipItem) => {
       try {
@@ -381,6 +414,17 @@ export function ClipboardView({ refreshKey }: { refreshKey: number }) {
           </svg>
           {t("clip.addFromClipboard")}
         </button>
+        {shotOn && (
+          <button
+            type="button"
+            onClick={onScreenshot}
+            title={t("shot.hint")}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-xs text-muted transition hover:border-accent hover:text-accent-ink"
+          >
+            <ShotIcon />
+            {t("shot.button")}
+          </button>
+        )}
       </div>
 
       <NotepadBox onAdded={() => flash(t("notepad.addedToClipboard"))} />
