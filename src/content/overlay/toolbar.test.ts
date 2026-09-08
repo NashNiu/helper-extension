@@ -86,4 +86,41 @@ describe("createToolbar", () => {
     bar.setLocale("zh-Hans");
     expect(bar.el.querySelector("[data-tool='mosaic']")!.getAttribute("title")).toBe("马赛克");
   });
+
+  it("点工具按钮只回调，不自动更新按下态——状态必须由外部驱动", () => {
+    const { bar } = make();
+    // 点击马赛克，只触发回调，displayed state 保持原样
+    click(bar.el, "[data-tool='mosaic']");
+    expect(bar.el.querySelector("[data-tool='select']")!.getAttribute("aria-pressed")).toBe("true");
+    expect(bar.el.querySelector("[data-tool='mosaic']")!.getAttribute("aria-pressed")).toBe("false");
+    // 现在由外部驱动状态变化，按下态才会改变
+    bar.setTool("mosaic");
+    expect(bar.el.querySelector("[data-tool='select']")!.getAttribute("aria-pressed")).toBe("false");
+    expect(bar.el.querySelector("[data-tool='mosaic']")!.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("点工具按钮不影响笔刷可见性——可见性由工具状态决定，点击无权改变", () => {
+    const { bar } = make();
+    const brushes = bar.el.querySelector<HTMLElement>("[data-brushes]")!;
+    // 初始：选区工具，笔刷隐藏
+    expect(brushes.style.display).toBe("none");
+    // 点击马赛克按钮，笔刷仍隐藏（状态未变）
+    click(bar.el, "[data-tool='mosaic']");
+    expect(brushes.style.display).toBe("none");
+    // 由外部更新工具状态，笔刷才会显示
+    bar.setTool("mosaic");
+    expect(brushes.style.display).not.toBe("none");
+  });
+
+  it("点笔刷按钮只回调，不自动更新按下态——状态必须由外部驱动", () => {
+    const { bar } = make();
+    // 点击大笔刷，只触发回调，displayed state 保持原样
+    click(bar.el, "[data-brush='large']");
+    expect(bar.el.querySelector("[data-brush='medium']")!.getAttribute("aria-pressed")).toBe("true");
+    expect(bar.el.querySelector("[data-brush='large']")!.getAttribute("aria-pressed")).toBe("false");
+    // 现在由外部驱动状态变化，按下态才会改变
+    bar.setBrush("large");
+    expect(bar.el.querySelector("[data-brush='medium']")!.getAttribute("aria-pressed")).toBe("false");
+    expect(bar.el.querySelector("[data-brush='large']")!.getAttribute("aria-pressed")).toBe("true");
+  });
 });
