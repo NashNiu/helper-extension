@@ -1,4 +1,11 @@
 import { normalizeRect, isTooSmall, toBitmapRect, type Rect } from "../shared/capture/rect";
+import {
+  bitmapScale,
+  emptyOps,
+  pixelateCrop,
+  renderAnnotated,
+  type Ops,
+} from "../shared/capture/annotate";
 import { SHOW_OVERLAY, type ShowOverlayMsg } from "../shared/capture/messages";
 import { translate, type Locale } from "../i18n/core";
 import { currentLocale } from "../shared/locale";
@@ -9,14 +16,19 @@ export const OVERLAY_ID = "helper-shot-overlay";
 const ACTIONS_H = 30;
 const ACTIONS_GAP = 8;
 
-/** 裁剪 + 写系统剪贴板。抽成参数是为了在测试里替换掉 canvas 与剪贴板这两个不可测的依赖。 */
-export type CopyFn = (dataUrl: string, r: Rect) => Promise<void>;
+/**
+ * 裁剪 + 合成标注 + 写系统剪贴板。抽成参数是为了在测试里替换掉 canvas 与剪贴板
+ * 这两个不可测的依赖。位图由覆盖层解码并持有,这里只用不放。
+ */
+export type CopyFn = (bmp: ImageBitmap, r: Rect, ops: Ops) => Promise<void>;
 
 interface Live {
   host: HTMLElement;
   prevOverflow: string;
   onKey: (e: KeyboardEvent) => void;
   onWindowMouseUp: (e: MouseEvent) => void;
+  /** 已解码的底图。预览与保存共用同一份,避免出现两个像素来源。 */
+  bmp: ImageBitmap | null;
 }
 
 let live: Live | null = null;
@@ -25,6 +37,7 @@ export function hideOverlay(): void {
   if (!live) return;
   document.removeEventListener("keydown", live.onKey, true);
   window.removeEventListener("mouseup", live.onWindowMouseUp);
+  live.bmp?.close();
   live.host.remove();
   document.documentElement.style.overflow = live.prevOverflow;
   live = null;
@@ -172,9 +185,38 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   // 里面的引号打断。
   surface.style.backgroundImage = `url("${dataUrl}")`;
 
+  // showOverlay 必须同步(遮罩要立刻出现),但解码是异步的。先把覆盖层挂出去,
+  // 位图解好再回填。保存路径会 await 这个 promise,所以不存在「还没解完就保存」。
+  const bmpReady = fetch(dataUrl)
+    .then((res) => res.blob())
+    .then((blob) => createImageBitmap(blob))
+    .then((decoded) => {
+      // 解码期间用户可能已经取消并重新截图了,那时 live 已经换人,这份要就地丢掉。
+      if (live?.host !== host) {
+        decoded.close();
+        return null;
+      }
+      live.bmp = decoded;
+      return decoded;
+    })
+    .catch((e) => {
+      // 位图现在是保存路径的前提,解不出来连原图都存不了。与其让用户对着一个
+      // 点保存没反应的覆盖层发愣,不如立刻说明并收场。
+      console.error("decode screenshot failed", e);
+      if (live?.host === host) {
+        void currentLocale()
+          .catch(() => "en" as Locale)
+          .then((l) => showToast(translate(l, "shot.copyFailed"), false));
+        hideOverlay();
+      }
+      return null;
+    });
+
   let start: { x: number; y: number } | null = null;
   // 已框好、等用户点保存的选区。null 表示还没框(或刚被取消/重新开拖)。
   let pending: Rect | null = null;
+  // 标注操作列表。Task 4 起才会被写入,现在恒为空——但保存路径已经把它传下去了。
+  let ops: Ops = emptyOps();
 
   /** 把按钮条贴到选区右下角外侧;下方放不下就收进选区内部,免得按钮跑到视口外点不到。 */
   function placeActions(r: Rect): void {
@@ -204,8 +246,11 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     // 已经又触发了一次截图,live 换成了新的覆盖层。这里只能拆自己发起时的那个,
     // 不能无脑拆「此刻的」live,否则会把刚出现的新覆盖层拆掉。
     const mine = live;
-    // 不在这里算缩放比:真正的比例要拿解码后的位图宽度才知道,由 copy 内部计算。
-    void copy(dataUrl, r)
+    void bmpReady
+      .then((bmp) => {
+        if (!bmp) return; // 覆盖层已经换人,这次保存作废
+        return copy(bmp, r, ops);
+      })
       .catch(() => {}) // 失败的提示由 copy 自己弹 toast;这里吞掉避免未处理的 rejection
       .finally(() => {
         if (live === mine) hideOverlay();
@@ -297,11 +342,10 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   const prevOverflow = document.documentElement.style.overflow;
   document.documentElement.style.overflow = "hidden";
   document.documentElement.appendChild(host);
-  live = { host, prevOverflow, onKey, onWindowMouseUp };
+  live = { host, prevOverflow, onKey, onWindowMouseUp, bmp: null };
 }
 
-/** 真实的裁剪 + 写剪贴板,并把结果(成功/失败)用 toast 告诉用户。 */
-export async function copyRegion(dataUrl: string, r: Rect): Promise<void> {
+export async function copyRegion(bmp: ImageBitmap, r: Rect, ops: Ops): Promise<void> {
   // 语言设置读取失败(最典型的是扩展重载/更新导致 context invalidated)不该拖累
   // 后面的提示——退回英文也远好过一声不吭,这个函数存在的意义就是让用户知道结果。
   let loc: Locale = "en";
@@ -311,32 +355,22 @@ export async function copyRegion(dataUrl: string, r: Rect): Promise<void> {
     /* 忽略:上面已经决定了退回英文 */
   }
   try {
-    const res = await fetch(dataUrl);
-    const bmp = await createImageBitmap(await res.blob());
-    try {
-      // 实测比例:多屏/页面缩放/系统缩放下 devicePixelRatio 与真实截图尺寸对不上。
-      const scale = window.innerWidth > 0 ? bmp.width / window.innerWidth : 1;
-      const b = toBitmapRect(r, scale, bmp.width, bmp.height);
-      if (b.w === 0 || b.h === 0) return; // 选区完全落在图外,当取消,不提示
-      const canvas = document.createElement("canvas");
-      canvas.width = b.w;
-      canvas.height = b.h;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("2d context unavailable");
-      ctx.drawImage(bmp, b.x, b.y, b.w, b.h, 0, 0, b.w, b.h);
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-      if (!blob) throw new Error("toBlob returned null");
-      // 只能写 image/png:Chrome 的 ClipboardItem 只稳定支持这一种图片类型。
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      showToast(translate(loc, "shot.copied"), true);
-    } finally {
-      bmp.close();
-    }
+    const scale = bitmapScale(bmp.width, window.innerWidth);
+    const b = toBitmapRect(r, scale, bmp.width, bmp.height);
+    if (b.w === 0 || b.h === 0) return; // 选区完全落在图外,当取消,不提示
+    const canvas = renderAnnotated(bmp, b, ops, pixelateCrop(bmp, b));
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("toBlob returned null");
+    // 只能写 image/png:Chrome 的 ClipboardItem 只稳定支持这一种图片类型。
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    showToast(translate(loc, "shot.copied"), true);
   } catch (e) {
     // 最常见的原因是文档失焦——Clipboard API 要求文档处于聚焦态。
     console.error("copyRegion failed", e);
     showToast(translate(loc, "shot.copyFailed"), false);
   }
+  // 注意:这里不再 bmp.close()。位图归覆盖层持有,由 hideOverlay 释放——
+  // 保存之后覆盖层还要用它重画,提前关掉会让画布变空白。
 }
 
 // 加载期只注册一个监听器,别的什么都不做——这个脚本跑在每一个页面上。

@@ -11,8 +11,15 @@ vi.mock("../shared/locale", () => ({
 }));
 
 import { showOverlay, hideOverlay, showToast, copyRegion, OVERLAY_ID, TOAST_ID } from "./screenshotOverlay";
+import { emptyOps } from "../shared/capture/annotate";
 
 const DATA_URL = "data:image/png;base64,AAAA";
+
+// happy-dom 没有 createImageBitmap。覆盖层现在会在显示时解码底图,所以这里给一个
+// 假位图:测试只关心「解出来的东西被原样传给了 copy」,不关心像素。
+const FAKE_BMP = { width: 2000, height: 1000, close: vi.fn() } as unknown as ImageBitmap;
+vi.stubGlobal("fetch", vi.fn(async () => ({ blob: async () => new Blob() })));
+vi.stubGlobal("createImageBitmap", vi.fn(async () => FAKE_BMP));
 
 function host(): HTMLElement | null {
   return document.getElementById(OVERLAY_ID);
@@ -85,10 +92,11 @@ describe("screenshotOverlay", () => {
     expect(copy).not.toHaveBeenCalled();
   });
 
-  it("拖出有效选区后不立刻复制，而是浮出保存/取消按钮", () => {
+  it("拖出有效选区后不立刻复制，而是浮出保存/取消按钮", async () => {
     const copy = vi.fn(async () => {});
     showOverlay(DATA_URL, copy);
     expect(actionsVisible()).toBe(false); // 还没框选,按钮不该露面
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
     drag([100, 200], [50, 80]);
     expect(copy).not.toHaveBeenCalled();
     expect(actionsVisible()).toBe(true);
@@ -106,36 +114,62 @@ describe("screenshotOverlay", () => {
     }
   });
 
-  it("点保存才按归一化矩形把选区写进剪贴板", () => {
+  it("点保存才按归一化矩形把选区写进剪贴板", async () => {
     const copy = vi.fn(async () => {});
     showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
     drag([100, 200], [50, 80]);
     clickSave();
-    expect(copy).toHaveBeenCalledWith(DATA_URL, { x: 50, y: 80, w: 50, h: 120 });
+    // commit() 里的 bmpReady.then(...) 即使 bmpReady 早已 resolve,回调也总是排到
+    // 微任务队列里,不会跟 clickSave() 同步执行——断言前得再放一轮微任务过去。
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { mosaics: [] });
   });
 
-  it("点取消不复制，直接拆除覆盖层", () => {
+  it("保存时把解码后的位图和操作列表交给 copy——不再传 dataUrl", async () => {
     const copy = vi.fn(async () => {});
     showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([100, 200], [50, 80]);
+    clickSave();
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
+    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { mosaics: [] });
+  });
+
+  it("覆盖层拆除时释放位图——位图现在归覆盖层持有，不释放就是泄漏", async () => {
+    (FAKE_BMP.close as ReturnType<typeof vi.fn>).mockClear();
+    showOverlay(DATA_URL, vi.fn(async () => {}));
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    hideOverlay();
+    expect(FAKE_BMP.close).toHaveBeenCalled();
+  });
+
+  it("点取消不复制，直接拆除覆盖层", async () => {
+    const copy = vi.fn(async () => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
     drag([100, 200], [50, 80]);
     clickCancel();
     expect(copy).not.toHaveBeenCalled();
     expect(host()).toBeNull();
   });
 
-  it("待确认时再拖一次可以重选，保存用的是新选区", () => {
+  it("待确认时再拖一次可以重选，保存用的是新选区", async () => {
     const copy = vi.fn(async () => {});
     showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
     drag([100, 200], [50, 80]);
     drag([10, 10], [30, 40]); // 不满意,重新拉一个
     clickSave();
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
     expect(copy).toHaveBeenCalledTimes(1);
-    expect(copy).toHaveBeenCalledWith(DATA_URL, { x: 10, y: 10, w: 20, h: 30 });
+    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 10, y: 10, w: 20, h: 30 }, { mosaics: [] });
   });
 
-  it("重新开始拖拽时按钮先收起来，免得它悬在半空挡着新选区", () => {
+  it("重新开始拖拽时按钮先收起来，免得它悬在半空挡着新选区", async () => {
     const copy = vi.fn(async () => {});
     showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
     drag([100, 200], [50, 80]);
     expect(actionsVisible()).toBe(true);
     const surface = host()!.shadowRoot!.querySelector("[data-shot-surface]")!;
@@ -143,25 +177,29 @@ describe("screenshotOverlay", () => {
     expect(actionsVisible()).toBe(false);
   });
 
-  it("按在保存按钮上不会被当成开始一次新框选", () => {
+  it("按在保存按钮上不会被当成开始一次新框选", async () => {
     // 按钮浮在 surface 上方,mousedown 会冒泡到 surface 的监听器。若不拦住,
     // 点保存的那一下会先把选区清成一个 0×0 的新起点,保存下去的就不是用户框的东西。
     const copy = vi.fn(async () => {});
     showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
     drag([100, 200], [50, 80]);
     host()!
       .shadowRoot!.querySelector<HTMLElement>("[data-shot-save]")!
       .dispatchEvent(new MouseEvent("mousedown", { clientX: 105, clientY: 205, button: 0, bubbles: true }));
     clickSave();
-    expect(copy).toHaveBeenCalledWith(DATA_URL, { x: 50, y: 80, w: 50, h: 120 });
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
+    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { mosaics: [] });
   });
 
-  it("待确认时按 Enter 等同于点保存", () => {
+  it("待确认时按 Enter 等同于点保存", async () => {
     const copy = vi.fn(async () => {});
     showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
     drag([100, 200], [50, 80]);
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    expect(copy).toHaveBeenCalledWith(DATA_URL, { x: 50, y: 80, w: 50, h: 120 });
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
+    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { mosaics: [] });
   });
 
   it("还没框选时按 Enter 什么也不做", () => {
@@ -172,18 +210,20 @@ describe("screenshotOverlay", () => {
     expect(host()).not.toBeNull();
   });
 
-  it("待确认时按 Esc 取消，不复制", () => {
+  it("待确认时按 Esc 取消，不复制", async () => {
     const copy = vi.fn(async () => {});
     showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
     drag([100, 200], [50, 80]);
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(copy).not.toHaveBeenCalled();
     expect(host()).toBeNull();
   });
 
-  it("选区太小视为误点：不复制，直接拆除", () => {
+  it("选区太小视为误点：不复制，直接拆除", async () => {
     const copy = vi.fn(async () => {});
     showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
     drag([100, 100], [102, 101]);
     expect(copy).not.toHaveBeenCalled();
     expect(host()).toBeNull();
@@ -229,6 +269,7 @@ describe("screenshotOverlay", () => {
     // 通过,因为它只断言 copy 被调用,不管调用之后覆盖层是否被拆掉。
     const copy = vi.fn(async () => {});
     showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
     drag([100, 200], [50, 80]);
     clickSave();
     expect(host()).not.toBeNull();
@@ -241,6 +282,7 @@ describe("screenshotOverlay", () => {
       throw new Error("clipboard write failed");
     });
     showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
     drag([100, 200], [50, 80]);
     clickSave();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -260,8 +302,10 @@ describe("screenshotOverlay", () => {
         }),
     );
     showOverlay(DATA_URL, firstCopy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
     drag([100, 200], [50, 80]);
     clickSave(); // 触发 firstCopy,promise 挂起未完成
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
     expect(firstCopy).toHaveBeenCalledTimes(1);
 
     const secondCopy = vi.fn(async () => {});
@@ -286,13 +330,14 @@ describe("screenshotOverlay", () => {
     expect(copy).not.toHaveBeenCalled();
   });
 
-  it("鼠标在窗口外松开也能正常结束拖拽——window 级兜底监听生效", () => {
+  it("鼠标在窗口外松开也能正常结束拖拽——window 级兜底监听生效", async () => {
     // surface 铺满视口,但如果用户把鼠标拖到浏览器窗口外(标签栏、系统菜单、
     // 另一块屏幕)才松开,那次 mouseup 根本不会派发在 surface 上,只有 window
     // 能收到。这里直接把 mouseup 派发在 window 上模拟这种情况,不经过 shadow
     // root(合成事件默认不 composed,也刚好符合「不靠冒泡也要生效」的要求)。
     const copy = vi.fn(async () => {});
     showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
     const surface = host()!.shadowRoot!.querySelector("[data-shot-surface]")!;
     surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 100, clientY: 200, button: 0, bubbles: true }));
     window.dispatchEvent(new MouseEvent("mouseup", { clientX: 50, clientY: 80 }));
@@ -302,8 +347,9 @@ describe("screenshotOverlay", () => {
     // 已经是 null,应该被 endDrag 的判空短路掉),选区不会被改写。
     window.dispatchEvent(new MouseEvent("mouseup", { clientX: 999, clientY: 999 }));
     clickSave();
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
     expect(copy).toHaveBeenCalledTimes(1);
-    expect(copy).toHaveBeenCalledWith(DATA_URL, { x: 50, y: 80, w: 50, h: 120 });
+    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { mosaics: [] });
   });
 });
 
@@ -337,17 +383,11 @@ describe("copyRegion 在 currentLocale 失败时仍要给出结果提示", () =>
   it("扩展 context invalidated(currentLocale 拒绝)不应吞掉复制结果——退回英文文案也要弹出 toast", async () => {
     // 逐个假造 copyRegion 真实实现要用到的浏览器 API:这个测试只关心
     // 「currentLocale 拒绝之后,后续流程是否还能跑完并弹出 toast」,所以每个
-    // 依赖都给最简单的可用实现,不追求还原真实的图像处理细节。
+    // 依赖都给最简单的可用实现,不追求还原真实的图像处理细节。位图现在由调用方
+    // (覆盖层)解码并传入,copyRegion 自己不再 fetch/decode,所以这里直接给一个
+    // 假位图,不用再假造 fetch/createImageBitmap。
     const fakeBlob = new Blob(["x"]);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({ blob: async () => fakeBlob }) as unknown as Response),
-    );
     const fakeBitmap = { width: 100, height: 100, close: vi.fn() } as unknown as ImageBitmap;
-    vi.stubGlobal(
-      "createImageBitmap",
-      vi.fn(async () => fakeBitmap),
-    );
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
       drawImage: vi.fn(),
     } as unknown as CanvasRenderingContext2D);
@@ -357,14 +397,15 @@ describe("copyRegion 在 currentLocale 失败时仍要给出结果提示", () =>
       configurable: true,
     });
 
-    await copyRegion(DATA_URL, { x: 0, y: 0, w: 50, h: 50 });
+    await copyRegion(fakeBitmap, { x: 0, y: 0, w: 50, h: 50 }, emptyOps());
 
     // 重点断言:即使 currentLocale() 抛了异常,copyRegion 也没有在到达任何一个
     // showToast(...) 调用之前就整体 reject——toast 节点必须出现。
     expect(document.getElementById(TOAST_ID)).not.toBeNull();
-    expect(fakeBitmap.close).toHaveBeenCalled(); // bmp.close() 在这条路径上也必须跑到
+    // 位图现在归覆盖层持有,copyRegion 不再负责关闭它——关了的话覆盖层后续
+    // 想用这份位图重画(比如预览)就会拿到一块空白画布。
+    expect(fakeBitmap.close).not.toHaveBeenCalled();
 
-    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 });
