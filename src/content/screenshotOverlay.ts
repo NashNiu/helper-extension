@@ -158,6 +158,7 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     onTool: (t) => {
       tool = t;
       toolbar.setTool(t);
+      refreshPreview();
     },
     onBrush: (b) => {
       brush = b;
@@ -169,6 +170,68 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   });
   const actions = toolbar.el;
   surface.append(actions);
+
+  // 预览画布。只在马赛克工具下、且有待定选区时挂在 surface 上——选区工具下
+  // 或者还没框选时,它整个不在 DOM 里,而不只是 display:none:那时用户看的
+  // 就该是原始底图,连一个隐藏的画布痕迹都不该留。
+  const preview = document.createElement("canvas");
+  preview.setAttribute("data-shot-preview", "");
+  preview.style.cssText = "position:absolute;display:none;pointer-events:none;";
+
+  /** 没有可预览的东西:把画布从 DOM 里摘掉。remove() 对未挂载的节点是安全的空操作。 */
+  function hidePreview(): void {
+    preview.remove();
+  }
+
+  // 像素化版本只依赖底图与裁剪矩形,所以按选区缓存;涂抹时只重画蒙版,不重算它。
+  let pixCache: { key: string; canvas: HTMLCanvasElement } | null = null;
+
+  function cropRect(r: Rect): Rect | null {
+    const bmp = live?.bmp;
+    if (!bmp) return null;
+    const b = toBitmapRect(r, bitmapScale(bmp.width, window.innerWidth), bmp.width, bmp.height);
+    return b.w === 0 || b.h === 0 ? null : b;
+  }
+
+  /** 重画预览。渲染失败(取不到 2d 上下文等)只隐藏预览,绝不把覆盖层带崩。 */
+  function refreshPreview(): void {
+    const bmp = live?.bmp;
+    if (tool !== "mosaic" || !pending || !bmp) {
+      hidePreview();
+      return;
+    }
+    const b = cropRect(pending);
+    if (!b) {
+      hidePreview();
+      return;
+    }
+    // 画布的挂载与尺寸只取决于选区,跟下面的渲染成败无关——先摆好,再去尝试画,
+    // 这样即使画布是空的(比如 happy-dom 测试环境根本拿不到 2d 上下文),
+    // 挂载状态和尺寸计算依然是正确、可验证的。
+    surface.append(preview);
+    // CSS 尺寸贴合选区(屏幕像素),后备存储是位图分辨率(见下面 preview.width/height)——
+    // 这就是预览既清晰又与输出同源的原因。
+    preview.style.left = `${pending.x}px`;
+    preview.style.top = `${pending.y}px`;
+    preview.style.width = `${pending.w}px`;
+    preview.style.height = `${pending.h}px`;
+    try {
+      const key = `${b.x},${b.y},${b.w},${b.h}`;
+      if (pixCache?.key !== key) pixCache = { key, canvas: pixelateCrop(bmp, b) };
+      // 与保存路径同一个 renderAnnotated——预览就是最终图像本身,只是缩小显示,
+      // 不是另起一套近似绘制,这样用户看到的和存下来的才不会走样。
+      const out = renderAnnotated(bmp, b, ops, pixCache.canvas);
+      const ctx = preview.getContext("2d");
+      if (!ctx) throw new Error("2d context unavailable");
+      preview.width = out.width;
+      preview.height = out.height;
+      ctx.drawImage(out, 0, 0);
+      preview.style.display = "block";
+    } catch (e) {
+      console.error("preview render failed", e);
+      preview.style.display = "none";
+    }
+  }
 
   // 语言只需要交给工具栏自己重绘一次,这里不必再留一份 loc——copyRegion 保存时
   // 会自己另外读一次 currentLocale(),两边互不依赖。
@@ -239,6 +302,7 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   function clearPending(): void {
     pending = null;
     actions.style.display = "none";
+    hidePreview();
   }
   // 立刻把隐藏写成内联样式。样式表里那条 display:none 只负责「JS 还没跑到时别闪一下」,
   // 之后按钮的显隐一律由内联样式说了算——两个地方各管一半,迟早对不上。
@@ -307,6 +371,7 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
           radius: brushRadius(brush, scale),
         };
         ops = pushStroke(ops, s);
+        refreshPreview();
       }
       painting = null;
       return;
@@ -323,6 +388,7 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     // (用户刚点了页面里的按钮),Clipboard API 的两个前提都自然满足。
     pending = r;
     placeActions(r);
+    refreshPreview();
   }
 
   surface.addEventListener("mousedown", (e) => {

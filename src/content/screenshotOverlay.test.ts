@@ -450,6 +450,27 @@ describe("screenshotOverlay", () => {
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
     expect(copy.mock.calls[0][2].mosaics).toHaveLength(1);
   });
+
+  it("切到马赛克工具后，选区内部挂上按位图分辨率开的预览画布", async () => {
+    showOverlay(DATA_URL, vi.fn(async () => {}));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    drag([100, 200], [50, 80]);
+    expect(host()!.shadowRoot!.querySelector("[data-shot-preview]")).toBeNull();
+    clickTool("mosaic");
+    const cv = host()!.shadowRoot!.querySelector<HTMLCanvasElement>("[data-shot-preview]");
+    expect(cv).not.toBeNull();
+    // CSS 尺寸按选区(屏幕像素),后备存储按位图分辨率——预览才既清晰又与输出同源
+    expect(cv!.style.width).toBe("50px");
+    expect(cv!.style.height).toBe("120px");
+  });
+
+  it("预览渲染抛错不会连累覆盖层——happy-dom 拿不到 2d 上下文，正好当这个场景", async () => {
+    showOverlay(DATA_URL, vi.fn(async () => {}));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    drag([100, 200], [50, 80]);
+    expect(() => clickTool("mosaic")).not.toThrow();
+    expect(host()).not.toBeNull();
+  });
 });
 
 describe("showToast", () => {
