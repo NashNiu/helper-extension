@@ -351,6 +351,43 @@ describe("screenshotOverlay", () => {
     expect(copy).toHaveBeenCalledTimes(1);
     expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { mosaics: [] });
   });
+
+  it("保存进行中被拆除覆盖层不能提前关闭位图——位图归 commit 所有，copy 结束才关且只关一次", async () => {
+    // FAKE_BMP 是模块级单例,它的 close 是所有用例共用的同一个 mock,测不出
+    // 「关早了」还是「关了几次」。这里造一个只属于这个用例的假位图,断言才有意义。
+    const localBmp = { width: 2000, height: 1000, close: vi.fn() } as unknown as ImageBitmap;
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => localBmp));
+
+    // copy 故意挂起不结束,模拟「点了保存,clipboard 还没写完」那一小段窗口期。
+    let resolveCopy!: () => void;
+    const copy = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveCopy = resolve;
+        }),
+    );
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([100, 200], [50, 80]);
+    clickSave();
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 把位图交给 copy
+    expect(copy).toHaveBeenCalledWith(localBmp, { x: 50, y: 80, w: 50, h: 120 }, { mosaics: [] });
+
+    // copy 还没 settle 时拆除覆盖层(用户按 Esc,或立刻又触发一次截图):这不该
+    // 关掉 copy 正在用的这份位图,否则它内部的 renderAnnotated 会因为位图已经
+    // detach 而抛错,保存就悄悄退化成一句「复制失败」。
+    hideOverlay();
+    expect(localBmp.close).not.toHaveBeenCalled();
+
+    // copy 结束之后,commit 自己的 finally 才把位图关掉——而且只关这一次,
+    // 不会因为上面那次 hideOverlay 已经关过而在这里又关一遍(反过来也一样:
+    // 不会因为这里关了,hideOverlay 那边又去关一次)。
+    resolveCopy();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(localBmp.close).toHaveBeenCalledTimes(1);
+
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => FAKE_BMP)); // 还原,不影响后面的用例
+  });
 });
 
 describe("showToast", () => {

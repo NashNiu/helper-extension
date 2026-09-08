@@ -185,6 +185,13 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   // 里面的引号打断。
   surface.style.backgroundImage = `url("${dataUrl}")`;
 
+  // 是否已经进入「点了保存,正在拷贝」的阶段。一旦为 true,位图的所有权就从
+  // 覆盖层转到这次 commit 手里:live.bmp 会被同步清空,hideOverlay 摸不到它,
+  // 解码回填也不会再把它塞回去——不然 copy 还在用位图画布时,一次 Esc 或者
+  // 又一次截图触发的 hideOverlay 会把它关掉,copy 里的 drawImage 就会因为
+  // 位图已 detach 而抛错,保存悄悄退化成一句「复制失败」。
+  let committing = false;
+
   // showOverlay 必须同步(遮罩要立刻出现),但解码是异步的。先把覆盖层挂出去,
   // 位图解好再回填。保存路径会 await 这个 promise,所以不存在「还没解完就保存」。
   const bmpReady = fetch(dataUrl)
@@ -196,7 +203,9 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
         decoded.close();
         return null;
       }
-      live.bmp = decoded;
+      // 已经在保存路径上:位图归 commit 所有,这里不能再把它挂回 live.bmp,
+      // 否则一次晚到的 hideOverlay 会把 copy 正用着的位图关掉。
+      if (!committing) live.bmp = decoded;
       return decoded;
     })
     .catch((e) => {
@@ -246,13 +255,27 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     // 已经又触发了一次截图,live 换成了新的覆盖层。这里只能拆自己发起时的那个,
     // 不能无脑拆「此刻的」live,否则会把刚出现的新覆盖层拆掉。
     const mine = live;
+    // 把位图的所有权从覆盖层挪到这次 commit:同步置位、同步清空 live.bmp,
+    // 中间不隔一次 await——不然 committing 置位和 live.bmp 清空之间如果被
+    // 别的同步代码插一脚,窗口虽然极窄也终究是窗口。清空之后,不管保存过程中
+    // 发生几次 hideOverlay(用户按 Esc、又触发一次截图……),都碰不到这个位图。
+    committing = true;
+    if (live?.host === host) live.bmp = null;
+    // 真正交给 copy 的那份位图引用,只在 finally 里关一次——bmpReady 本身可能
+    // 因为「覆盖层已经换人」解析成 null(见上面的解码分支),这时压根没有位图
+    // 可关,bmpForCommit 就保持 null。
+    let bmpForCommit: ImageBitmap | null = null;
     void bmpReady
       .then((bmp) => {
         if (!bmp) return; // 覆盖层已经换人,这次保存作废
+        bmpForCommit = bmp;
         return copy(bmp, r, ops);
       })
       .catch(() => {}) // 失败的提示由 copy 自己弹 toast;这里吞掉避免未处理的 rejection
       .finally(() => {
+        // 位图现在只在这一处关闭:上面已经把它从 live 摘掉,hideOverlay 早就够
+        // 不到它了,所以这里关一次、且只会关这一次——不会跟 hideOverlay 撞车。
+        bmpForCommit?.close();
         if (live === mine) hideOverlay();
       });
   }
