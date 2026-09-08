@@ -61,6 +61,20 @@ function clickTool(t: "select" | "mosaic") {
     .dispatchEvent(new MouseEvent("click", { bubbles: true }));
 }
 
+function clickUndo() {
+  host()!
+    .shadowRoot!.querySelector<HTMLElement>("[data-undo]")!
+    .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+}
+
+async function paintOne(copy: ReturnType<typeof vi.fn>) {
+  showOverlay(DATA_URL, copy);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  drag([100, 200], [50, 80]);
+  clickTool("mosaic");
+  drag([60, 90], [70, 100]);
+}
+
 describe("screenshotOverlay", () => {
   beforeEach(() => {
     // 先拆掉上一个用例可能留下的覆盖层,再重置 overflow——顺序反了会被 hideOverlay
@@ -469,6 +483,48 @@ describe("screenshotOverlay", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     drag([100, 200], [50, 80]);
     expect(() => clickTool("mosaic")).not.toThrow();
+    expect(host()).not.toBeNull();
+  });
+
+  it("撤销让笔迹数减一", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    await paintOne(copy);
+    drag([61, 91], [71, 101]); // 第二笔
+    clickUndo();
+    clickSave();
+    // 同上面其它保存路径的用例:commit() 里的 bmpReady.then(...) 总是排到微任务
+    // 队列里,不会跟 clickSave() 同步执行——断言前得再放一轮微任务过去。
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(copy.mock.calls[0][2].mosaics).toHaveLength(1);
+  });
+
+  it("Ctrl+Z 与点撤销等价", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    await paintOne(copy);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
+    clickSave();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(copy.mock.calls[0][2].mosaics).toHaveLength(0);
+  });
+
+  it("撤销按钮在没有笔迹时禁用，涂一笔后可用", async () => {
+    const copy = vi.fn(async () => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const undoBtn = () => host()!.shadowRoot!.querySelector<HTMLButtonElement>("[data-undo]")!;
+    expect(undoBtn().disabled).toBe(true);
+    drag([100, 200], [50, 80]);
+    clickTool("mosaic");
+    drag([60, 90], [70, 100]);
+    expect(undoBtn().disabled).toBe(false);
+  });
+
+  it("撤销到空之后再撤销不报错，也不会把覆盖层拆掉", async () => {
+    const copy = vi.fn(async () => {});
+    await paintOne(copy);
+    clickUndo();
+    expect(() => clickUndo()).not.toThrow();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
     expect(host()).not.toBeNull();
   });
 });

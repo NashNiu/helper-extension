@@ -4,10 +4,12 @@ import {
   brushRadius,
   DEFAULT_BRUSH,
   emptyOps,
+  isEmpty,
   pixelateCrop,
   pushStroke,
   renderAnnotated,
   toBitmapPt,
+  undo as undoOps,
   type BrushSize,
   type Ops,
   type Pt,
@@ -164,7 +166,7 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
       brush = b;
       toolbar.setBrush(b);
     },
-    onUndo: () => {}, // Task 6 接上
+    onUndo: () => doUndo(),
     onCancel: () => hideOverlay(),
     onSave: () => commit(),
   });
@@ -231,6 +233,18 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
       console.error("preview render failed", e);
       preview.style.display = "none";
     }
+  }
+
+  /** 操作列表变了就同步撤销按钮——按钮亮着却没东西可撤,比禁用更让人困惑。 */
+  function afterOpsChanged(): void {
+    toolbar.setUndoEnabled(!isEmpty(ops));
+    refreshPreview();
+  }
+
+  function doUndo(): void {
+    if (isEmpty(ops)) return; // 空列表上撤销是无操作,不该有任何副作用
+    ops = undoOps(ops);
+    afterOpsChanged();
   }
 
   // 语言只需要交给工具栏自己重绘一次,这里不必再留一份 loc——copyRegion 保存时
@@ -371,7 +385,7 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
           radius: brushRadius(brush, scale),
         };
         ops = pushStroke(ops, s);
-        refreshPreview();
+        afterOpsChanged();
       }
       painting = null;
       return;
@@ -438,6 +452,13 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     if (e.key === "Escape") {
       e.stopPropagation();
       hideOverlay();
+      return;
+    }
+    // Ctrl/Cmd+Z 与点撤销按钮完全等价,走同一个入口。
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+      e.stopPropagation();
+      e.preventDefault();
+      doUndo();
       return;
     }
     // Enter 等同于点保存,但只在已经框好、正等确认时才算数——没有选区时按回车
