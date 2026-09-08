@@ -11,7 +11,8 @@ vi.mock("../shared/locale", () => ({
 }));
 
 import { showOverlay, hideOverlay, showToast, copyRegion, OVERLAY_ID, TOAST_ID } from "./screenshotOverlay";
-import { emptyOps } from "../shared/capture/annotate";
+import { emptyOps, type Ops } from "../shared/capture/annotate";
+import type { Rect } from "../shared/capture/rect";
 
 const DATA_URL = "data:image/png;base64,AAAA";
 
@@ -52,6 +53,12 @@ function clickCancel(): void {
   host()!.shadowRoot!.querySelector<HTMLElement>("[data-shot-cancel]")!.dispatchEvent(
     new MouseEvent("click", { bubbles: true }),
   );
+}
+
+function clickTool(t: "select" | "mosaic") {
+  host()!
+    .shadowRoot!.querySelector<HTMLElement>(`[data-tool='${t}']`)!
+    .dispatchEvent(new MouseEvent("click", { bubbles: true }));
 }
 
 describe("screenshotOverlay", () => {
@@ -387,6 +394,61 @@ describe("screenshotOverlay", () => {
     expect(localBmp.close).toHaveBeenCalledTimes(1);
 
     vi.stubGlobal("createImageBitmap", vi.fn(async () => FAKE_BMP)); // 还原,不影响后面的用例
+  });
+
+  it("马赛克工具下拖动是涂抹,不再改变选区", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    drag([100, 200], [50, 80]); // 先框一个选区
+    clickTool("mosaic");
+    drag([60, 90], [70, 100]); // 这一拖是涂抹
+    clickSave();
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
+    const [, rect, ops] = copy.mock.calls[0];
+    expect(rect).toEqual({ x: 50, y: 80, w: 50, h: 120 }); // 选区没被改
+    expect(ops.mosaics).toHaveLength(1); // 多了一条笔迹
+  });
+
+  it("涂抹的笔迹存的是位图坐标,不是屏幕坐标", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    drag([100, 200], [50, 80]);
+    clickTool("mosaic");
+    drag([60, 90], [60, 90]);
+    clickSave();
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
+    const ops = copy.mock.calls[0][2];
+    // FAKE_BMP 宽 2000,happy-dom 视口宽 1024 → scale 约 1.95,位图坐标必然大于屏幕坐标
+    expect(ops.mosaics[0].points[0].x).toBeGreaterThan(60);
+  });
+
+  it("切回选区工具后拖动又能重新框选", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    drag([100, 200], [50, 80]);
+    clickTool("mosaic");
+    clickTool("select");
+    drag([10, 10], [40, 50]);
+    clickSave();
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
+    expect(copy.mock.calls[0][1]).toEqual({ x: 10, y: 10, w: 30, h: 40 });
+  });
+
+  it("重新框选不清空已有笔迹——笔迹画在整张截图上,框选只是取景", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    drag([100, 200], [50, 80]);
+    clickTool("mosaic");
+    drag([60, 90], [70, 100]);
+    clickTool("select");
+    drag([10, 10], [40, 50]);
+    clickSave();
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
+    expect(copy.mock.calls[0][2].mosaics).toHaveLength(1);
   });
 });
 

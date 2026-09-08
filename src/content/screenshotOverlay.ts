@@ -1,14 +1,22 @@
 import { normalizeRect, isTooSmall, toBitmapRect, type Rect } from "../shared/capture/rect";
 import {
   bitmapScale,
+  brushRadius,
+  DEFAULT_BRUSH,
   emptyOps,
   pixelateCrop,
+  pushStroke,
   renderAnnotated,
+  toBitmapPt,
+  type BrushSize,
   type Ops,
+  type Pt,
+  type Stroke,
 } from "../shared/capture/annotate";
 import { SHOW_OVERLAY, type ShowOverlayMsg } from "../shared/capture/messages";
 import { translate, type Locale } from "../i18n/core";
 import { currentLocale } from "../shared/locale";
+import { createToolbar, type Tool } from "./overlay/toolbar";
 
 export const OVERLAY_ID = "helper-shot-overlay";
 
@@ -108,43 +116,33 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
         background: rgba(0, 0, 0, 0.75); color: #fff; font: 12px system-ui, sans-serif;
         white-space: nowrap; pointer-events: none;
       }
-      .actions { position: absolute; display: none; gap: 8px; }
-      .actions button {
-        all: unset; box-sizing: border-box; cursor: pointer;
-        width: 28px; height: 28px; border-radius: 50%;
-        display: flex; align-items: center; justify-content: center;
-        color: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
-        transition: transform 0.08s ease;
+      .toolbar {
+        position: absolute; display: none; gap: 6px; align-items: center;
+        padding: 5px 7px; border-radius: 8px;
+        background: rgba(28, 28, 30, 0.92); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
       }
-      .actions button:hover { transform: scale(1.08); }
-      .actions button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+      .toolbar .group { display: flex; gap: 4px; }
+      .toolbar button {
+        all: unset; box-sizing: border-box; cursor: pointer;
+        width: 26px; height: 26px; border-radius: 5px;
+        display: flex; align-items: center; justify-content: center; color: #fff;
+      }
+      .toolbar button:hover { background: rgba(255, 255, 255, 0.14); }
+      .toolbar button[aria-pressed="true"] { background: rgba(255, 255, 255, 0.22); }
+      .toolbar button:disabled { opacity: 0.35; cursor: default; }
+      .toolbar button:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
       /* 取消用红、保存用扩展主题色(src/index.css 的 --color-accent: #2e7d72)。
-         内容脚本跑在 shadow DOM 里,拿不到面板那套 CSS 变量,只能写死值——
-         哪天改主题色,这里得跟着改。红色沿用 showToast 报错的同一族色,
-         免得同一个覆盖层里冒出两种不一样的红。 */
-      .actions .cancel { background: rgba(178, 38, 38, 0.94); }
-      .actions .cancel:hover { background: rgba(198, 52, 52, 0.96); }
-      .actions .save { background: #2e7d72; }
-      .actions .save:hover { background: #35908a; }
+         这两个色值是上一次改动刚定下来的,不要换回蓝色——内容脚本在 shadow DOM 里
+         拿不到面板的 CSS 变量,只能写死,改主题色时这里要跟着改。 */
+      .toolbar .cancel { background: rgba(178, 38, 38, 0.94); }
+      .toolbar .cancel:hover { background: rgba(198, 52, 52, 0.96); }
+      .toolbar .save { background: #2e7d72; }
+      .toolbar .save:hover { background: #35908a; }
     </style>
     <div class="surface" data-shot-surface>
       <div class="mask" data-shot-mask></div>
       <div class="sel" data-shot-sel></div>
       <div class="size" data-shot-size></div>
-      <div class="actions" data-shot-actions>
-        <button type="button" class="cancel" data-shot-cancel>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
-            <path d="M6 6l12 12M18 6L6 18" />
-          </svg>
-        </button>
-        <button type="button" class="save" data-shot-save>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M4 12.5l5.5 5.5L20 7" />
-          </svg>
-        </button>
-      </div>
     </div>
   `;
 
@@ -152,33 +150,31 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   const mask = root.querySelector<HTMLElement>("[data-shot-mask]")!;
   const sel = root.querySelector<HTMLElement>("[data-shot-sel]")!;
   const size = root.querySelector<HTMLElement>("[data-shot-size]")!;
-  const actions = root.querySelector<HTMLElement>("[data-shot-actions]")!;
-  const saveBtn = root.querySelector<HTMLElement>("[data-shot-save]")!;
-  const cancelBtn = root.querySelector<HTMLElement>("[data-shot-cancel]")!;
 
-  // showOverlay 必须同步(它跑在消息回调里,晚一拍遮罩就慢一拍),而读语言是异步的。
-  // 所以先按英文渲染,拿到设置后再回填:按钮真正露面要等用户拖完选区,那时候这次
-  // storage 读取早就回来了,不会看到文案跳变。读失败就一直是英文——有按钮可点,
-  // 远好过为了等文案把整个覆盖层卡住。
-  let loc: Locale = "en";
-  // 按钮里只有图标没有文字,所以文案得挂在 aria-label(读屏的可访问名)和 title
-  // (鼠标悬停提示)上。两者缺一:少了 aria-label 读屏只会念出「按钮」,少了 title
-  // 用户就得靠猜图标含义。svg 上标了 aria-hidden,免得它把可访问名搅乱。
-  function paintLabels(): void {
-    for (const [btn, key] of [
-      [saveBtn, "action.save"],
-      [cancelBtn, "action.cancel"],
-    ] as const) {
-      const text = translate(loc, key);
-      btn.setAttribute("aria-label", text);
-      btn.setAttribute("title", text);
-    }
-  }
-  paintLabels();
+  let tool: Tool = "select";
+  let brush: BrushSize = DEFAULT_BRUSH;
+
+  const toolbar = createToolbar({
+    onTool: (t) => {
+      tool = t;
+      toolbar.setTool(t);
+    },
+    onBrush: (b) => {
+      brush = b;
+      toolbar.setBrush(b);
+    },
+    onUndo: () => {}, // Task 6 接上
+    onCancel: () => hideOverlay(),
+    onSave: () => commit(),
+  });
+  const actions = toolbar.el;
+  surface.append(actions);
+
+  // 语言只需要交给工具栏自己重绘一次,这里不必再留一份 loc——copyRegion 保存时
+  // 会自己另外读一次 currentLocale(),两边互不依赖。
   void currentLocale()
     .then((l) => {
-      loc = l;
-      paintLabels();
+      toolbar.setLocale(l);
     })
     .catch(() => {});
   // 用 style 赋值而不是写进 innerHTML:dataUrl 很长,拼进模板串既难读又容易被
@@ -222,6 +218,8 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     });
 
   let start: { x: number; y: number } | null = null;
+  // 正在涂抹的这一笔。与 start 分开:选区拖动只需要起点,涂抹要留住整条轨迹。
+  let painting: Pt[] | null = null;
   // 已框好、等用户点保存的选区。null 表示还没框(或刚被取消/重新开拖)。
   let pending: Rect | null = null;
   // 标注操作列表。Task 4 起才会被写入,现在恒为空——但保存路径已经把它传下去了。
@@ -298,6 +296,21 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   // 兜底监听调用。「先判空、再置空 start、才使用它」保证两边都收到同一次松开时
   // 不会被处理两次——第二次进来 start 已经是 null,直接短路。
   function endDrag(clientX: number, clientY: number): void {
+    if (painting) {
+      painting.push({ x: clientX, y: clientY });
+      const bmp = live?.bmp;
+      if (bmp) {
+        // 收集的是 CSS 坐标,存进操作列表前立刻换算成位图坐标——之后渲染就不必再考虑缩放。
+        const scale = bitmapScale(bmp.width, window.innerWidth);
+        const s: Stroke = {
+          points: painting.map((p) => toBitmapPt(p, scale)),
+          radius: brushRadius(brush, scale),
+        };
+        ops = pushStroke(ops, s);
+      }
+      painting = null;
+      return;
+    }
     if (!start) return;
     const r = normalizeRect(start.x, start.y, clientX, clientY);
     start = null;
@@ -314,13 +327,23 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
 
   surface.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return; // 右键留给取消
-    // 重新开拖 = 对上一个选区不满意。先把按钮收起来,否则它会悬在半空挡着新选区。
+    if (tool === "mosaic" && pending) {
+      // 马赛克工具下拖动是涂抹,不动选区。没有选区时不该能涂——涂到哪儿都不会被保存。
+      painting = [{ x: e.clientX, y: e.clientY }];
+      e.preventDefault();
+      return;
+    }
+    // 重新开拖 = 对上一个选区不满意。先把工具栏收起来,否则它会悬在半空挡着新选区。
     clearPending();
     start = { x: e.clientX, y: e.clientY };
     e.preventDefault();
   });
 
   surface.addEventListener("mousemove", (e) => {
+    if (painting) {
+      painting.push({ x: e.clientX, y: e.clientY });
+      return;
+    }
     if (!start) return;
     paint(normalizeRect(start.x, start.y, e.clientX, e.clientY));
   });
@@ -335,11 +358,10 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   const onWindowMouseUp = (e: MouseEvent) => endDrag(e.clientX, e.clientY);
   window.addEventListener("mouseup", onWindowMouseUp);
 
-  // 按钮浮在 surface 上方,mousedown 会冒泡到上面那个「开始框选」的监听器。不拦住的话,
-  // 点保存的那一下会先把选区重置成一个 0×0 的新起点,保存下去的就不是用户框的东西了。
+  // 工具栏浮在 surface 上方,mousedown 会冒泡到上面那个「开始框选」的监听器。不拦住的话,
+  // 点任何一个工具按钮都会先把选区重置成一个 0×0 的新起点,选区当场消失,工具栏也
+  // 跟着收起来。
   actions.addEventListener("mousedown", (e) => e.stopPropagation());
-  saveBtn.addEventListener("click", () => commit());
-  cancelBtn.addEventListener("click", () => hideOverlay());
 
   surface.addEventListener("contextmenu", (e) => {
     e.preventDefault();
