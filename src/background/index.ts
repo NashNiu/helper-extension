@@ -20,7 +20,11 @@ import { todoApi } from "../shared/api/todo";
 import { getActiveTimer, setActiveTimer, ACTIVE_TIMER_KEY } from "../shared/activeTimer";
 import { translate } from "../i18n/core";
 import { currentLocale } from "../shared/locale";
-import { initClipboard } from "./clipboard";
+// 副作用 import:clipboard.ts 在模块顶层注册右键菜单点击与文字捕获两个监听器,
+// 这行不是多余的——删掉它剪贴板捕获就会静默失效。
+import "./clipboard";
+import { syncMenus } from "./menus";
+import { initCapture } from "./capture";
 import { storageGet, storageSet } from "../shared/storage";
 import { localDailyReminders } from "../shared/local/dailyReminders";
 import { presetNameKey } from "../shared/focusMethods";
@@ -39,7 +43,7 @@ chrome.runtime.onInstalled.addListener(() => {
     .setPanelBehavior({ openPanelOnActionClick: true })
     .catch((e) => console.error(e));
   chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 });
-  void initClipboard();
+  void syncMenus();
   void syncDailyAlarms();
   void refreshBadge();
   void recoverTimerAlarm();
@@ -47,7 +51,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 });
-  void initClipboard();
+  void syncMenus();
   void syncDailyAlarms();
 });
 
@@ -346,3 +350,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // 正确位置——onStartup 只在浏览器 profile 启动时触发,SW 被回收后重新拉起不会触发它。
 void refreshBadge();
 void recoverTimerAlarm();
+// 监听器必须在 SW 每次被拉起时同步注册,不能只在 onInstalled 里注册——SW 被回收后
+// 重新拉起不会重跑 onInstalled,只会重跑顶层脚本。
+initCapture();

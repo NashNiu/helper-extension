@@ -12,6 +12,7 @@ import { getKey, setKey, clearKey } from "../shared/ai/apiKey";
 import { validateKey } from "../shared/ai/deepseek";
 import { getSettings, setLimit, setAutoCapture, DEFAULT_LIMIT } from "../shared/clipboardStore";
 import { isSoundEnabled, setSoundEnabled } from "../shared/soundSettings";
+import { getEntries, setEntry, DEFAULT_ENTRIES, type ShotSource } from "../shared/captureSettings";
 
 type Seg = "todos" | "reminders";
 
@@ -430,6 +431,45 @@ function ClipboardSettingsCard() {
   );
 }
 
+const SHOT_ENTRY_ROWS: { key: ShotSource; label: MessageKey }[] = [
+  { key: "sidePanel", label: "shot.entrySidePanel" },
+  { key: "contextMenu", label: "shot.entryContextMenu" },
+  { key: "shortcut", label: "shot.entryShortcut" },
+];
+
+function ScreenshotSettingsCard() {
+  const t = useT();
+  // 先按默认值渲染,避免异步读盘前复选框闪一下未选中态(同 SoundSettingsCard)。
+  const [entries, setEntries] = useState(DEFAULT_ENTRIES);
+
+  useEffect(() => {
+    void getEntries().then(setEntries);
+  }, []);
+
+  async function toggle(key: ShotSource, next: boolean) {
+    setEntries((prev) => ({ ...prev, [key]: next }));
+    await setEntry(key, next);
+  }
+
+  return (
+    <div className="mb-3 rounded-2xl border border-line bg-surface p-4">
+      <div className="mb-3 text-sm font-semibold text-ink">{t("shot.settingsSection")}</div>
+      {SHOT_ENTRY_ROWS.map((row) => (
+        <label key={row.key} className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-ink first:mt-0">
+          <input
+            type="checkbox"
+            checked={entries[row.key]}
+            onChange={(e) => void toggle(row.key, e.target.checked)}
+            className="h-4 w-4 accent-accent"
+          />
+          {t(row.label)}
+        </label>
+      ))}
+      <p className="mt-2 text-xs leading-relaxed text-muted">{t("shot.shortcutHint")}</p>
+    </div>
+  );
+}
+
 export function ProfileView({
   onBack,
   onChanged,
@@ -457,6 +497,7 @@ export function ProfileView({
         <AiKeyCard />
         <SoundSettingsCard />
         <ClipboardSettingsCard />
+        <ScreenshotSettingsCard />
         {/* 语言选择器 */}
         <div className="flex items-center justify-between rounded-2xl border border-line bg-surface px-4 py-3">
           <span className="text-sm text-ink">{t("profile.language")}</span>
