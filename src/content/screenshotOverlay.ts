@@ -545,6 +545,64 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   live = { host, prevOverflow, onKey, onWindowMouseUp, bmp: null };
 }
 
+/**
+ * 用传统 execCommand 把图片写进剪贴板。返回是否写成了。
+ *
+ * 选区跨不进 Shadow DOM,所以承载图片的临时节点只能挂在页面自己的 body 上,
+ * 不能放进覆盖层的 shadow root。
+ */
+async function copyViaExecCommand(canvas: HTMLCanvasElement): Promise<boolean> {
+  const sel = window.getSelection();
+  if (!sel) return false;
+
+  // 定位到视口外并全透明:既能参与选区,又不会闪一下给用户看见,position:fixed
+  // 也保证它不撑大文档、不影响滚动位置。
+  const holder = document.createElement("div");
+  holder.contentEditable = "true";
+  holder.setAttribute("style", "position:fixed;top:0;left:-9999px;opacity:0;pointer-events:none;");
+  const img = document.createElement("img");
+  img.src = canvas.toDataURL("image/png");
+  holder.appendChild(img);
+  document.body.appendChild(holder);
+
+  // 用户在页面上本来可能选着东西,复制完要原样还回去。
+  const saved: Range[] = [];
+  for (let i = 0; i < sel.rangeCount; i++) saved.push(sel.getRangeAt(i));
+
+  try {
+    // 图片没解码完就复制,剪贴板里会只剩一个 <img> 标签而没有位图。
+    await img.decode();
+    const range = document.createRange();
+    range.selectNode(img);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return document.execCommand("copy");
+  } finally {
+    holder.remove();
+    sel.removeAllRanges();
+    for (const r of saved) sel.addRange(r);
+  }
+}
+
+/**
+ * 把渲染好的截图写进系统剪贴板。返回是否写成了。
+ *
+ * 首选异步 Clipboard API——它写的是纯 image/png,粘贴质量最好。但
+ * navigator.clipboard 和 ClipboardItem 都是 [SecureContext] 接口,内容脚本跑在
+ * http:// 页面上时这两个东西压根不存在(不是调用失败,是属性为 undefined)。
+ * 那种页面退回 execCommand("copy"):它不受安全上下文限制,靠 manifest 里的
+ * clipboardWrite 权限,代价是剪贴板里会多一份 text/html 的 <img> 备选格式,
+ * 少数编辑器可能取那一份而不是位图。
+ */
+async function writeImageToClipboard(canvas: HTMLCanvasElement, blob: Blob): Promise<boolean> {
+  if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+    // 只能写 image/png:Chrome 的 ClipboardItem 只稳定支持这一种图片类型。
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    return true;
+  }
+  return copyViaExecCommand(canvas);
+}
+
 export async function copyRegion(bmp: ImageBitmap, r: Rect, ops: Ops): Promise<void> {
   // 语言设置读取失败(最典型的是扩展重载/更新导致 context invalidated)不该拖累
   // 后面的提示——退回英文也远好过一声不吭,这个函数存在的意义就是让用户知道结果。
@@ -566,9 +624,9 @@ export async function copyRegion(bmp: ImageBitmap, r: Rect, ops: Ops): Promise<v
     const canvas = renderAnnotated(bmp, b, ops, pix);
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
     if (!blob) throw new Error("toBlob returned null");
-    // 只能写 image/png:Chrome 的 ClipboardItem 只稳定支持这一种图片类型。
-    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-    showToast(translate(loc, "shot.copied"), true);
+    const ok = await writeImageToClipboard(canvas, blob);
+    // 两条路都没写成不是「失焦」——那句「点一下页面再试」在这里只会把人带偏。
+    showToast(translate(loc, ok ? "shot.copied" : "shot.copyUnavailable"), ok);
   } catch (e) {
     // 最常见的原因是文档失焦——Clipboard API 要求文档处于聚焦态。
     console.error("copyRegion failed", e);

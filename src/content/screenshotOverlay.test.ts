@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // currentLocale() 内部走 chrome.storage.local.get,扩展重载/更新时会抛
 // "Extension context invalidated"。mock 成始终拒绝,用来验证 copyRegion 在
@@ -13,6 +13,7 @@ vi.mock("../shared/locale", () => ({
 import { showOverlay, hideOverlay, showToast, copyRegion, OVERLAY_ID, TOAST_ID } from "./screenshotOverlay";
 import { emptyOps, type Ops } from "../shared/capture/annotate";
 import type { Rect } from "../shared/capture/rect";
+import { translate } from "../i18n/core";
 
 const DATA_URL = "data:image/png;base64,AAAA";
 
@@ -628,5 +629,85 @@ describe("copyRegion 在 currentLocale 失败时仍要给出结果提示", () =>
     expect(fakeBitmap.close).not.toHaveBeenCalled();
 
     vi.restoreAllMocks();
+  });
+});
+
+// http:// 页面上 navigator.clipboard 与 ClipboardItem 都不存在——它们是
+// [SecureContext] 接口。这一组盯着那条兜底路径:execCommand("copy") 不受安全
+// 上下文限制,靠的是 manifest 里的 clipboardWrite 权限。
+describe("copyRegion 在非安全上下文(http 页面)下的兜底", () => {
+  const ORIGINAL_CLIPBOARD_ITEM = (globalThis as unknown as { ClipboardItem?: unknown }).ClipboardItem;
+  let execCommand: ReturnType<typeof vi.fn>;
+
+  /** happy-dom 缺的那几个图像 API,给最简单的可用实现:这里不关心像素。 */
+  function fakeImaging() {
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((cb: BlobCallback) => cb(new Blob(["x"])));
+    vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(DATA_URL);
+    (HTMLImageElement.prototype as unknown as { decode: () => Promise<void> }).decode = vi.fn(async () => {});
+  }
+
+  function fakeBmp(): ImageBitmap {
+    return { width: 100, height: 100, close: vi.fn() } as unknown as ImageBitmap;
+  }
+
+  function toastText(): string {
+    return document.getElementById(TOAST_ID)!.shadowRoot!.textContent ?? "";
+  }
+
+  beforeEach(() => {
+    document.getElementById(TOAST_ID)?.remove();
+    fakeImaging();
+    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+    vi.stubGlobal("ClipboardItem", undefined);
+    execCommand = vi.fn(() => true);
+    (document as unknown as { execCommand: unknown }).execCommand = execCommand;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.stubGlobal("ClipboardItem", ORIGINAL_CLIPBOARD_ITEM);
+  });
+
+  it("navigator.clipboard 不存在时改用 execCommand 复制,并报成功", async () => {
+    await copyRegion(fakeBmp(), { x: 0, y: 0, w: 50, h: 50 }, emptyOps());
+
+    expect(execCommand).toHaveBeenCalledWith("copy");
+    expect(toastText()).toContain(translate("en", "shot.copied"));
+  });
+
+  it("兜底用的临时节点复制完就摘掉,不留在页面里", async () => {
+    await copyRegion(fakeBmp(), { x: 0, y: 0, w: 50, h: 50 }, emptyOps());
+
+    expect(document.body.querySelector("img")).toBeNull();
+    expect(document.body.querySelector("[contenteditable]")).toBeNull();
+  });
+
+  it("execCommand 也失败时给出单独的文案,不再说「点一下页面再试」", async () => {
+    execCommand.mockReturnValue(false);
+
+    await copyRegion(fakeBmp(), { x: 0, y: 0, w: 50, h: 50 }, emptyOps());
+
+    expect(toastText()).toContain(translate("en", "shot.copyUnavailable"));
+    expect(toastText()).not.toContain(translate("en", "shot.copyFailed"));
+  });
+
+  it("安全上下文下仍走 ClipboardItem,不碰 execCommand", async () => {
+    const write = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", { value: { write }, configurable: true });
+    vi.stubGlobal(
+      "ClipboardItem",
+      class {
+        constructor(public items: Record<string, Blob>) {}
+      },
+    );
+
+    await copyRegion(fakeBmp(), { x: 0, y: 0, w: 50, h: 50 }, emptyOps());
+
+    expect(write).toHaveBeenCalled();
+    expect(execCommand).not.toHaveBeenCalled();
+    expect(toastText()).toContain(translate("en", "shot.copied"));
   });
 });

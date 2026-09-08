@@ -224,6 +224,7 @@ export const zhHans: Record<keyof typeof en, string> = {
   "shot.menuTitle": "截图",
   "shot.copied": "截图已复制到剪贴板",
   "shot.copyFailed": "复制失败，点一下页面再试一次",
+  "shot.copyUnavailable": "当前页面无法写入剪贴板",
   "shot.unsupportedPage": "当前页面不支持截图",
   "shot.permissionDenied": "未授权，请改用快捷键或页面右键菜单",
   "shot.startFailed": "截图未能启动，请重试，或重新打开侧边栏",

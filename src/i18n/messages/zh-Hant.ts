@@ -224,6 +224,7 @@ export const zhHant: Record<keyof typeof en, string> = {
   "shot.menuTitle": "截圖",
   "shot.copied": "截圖已複製到剪貼簿",
   "shot.copyFailed": "複製失敗，點一下頁面再試一次",
+  "shot.copyUnavailable": "目前頁面無法寫入剪貼簿",
   "shot.unsupportedPage": "目前頁面不支援截圖",
   "shot.permissionDenied": "未授權，請改用快速鍵或頁面右鍵選單",
   "shot.startFailed": "螢幕截圖未能啟動，請重試，或重新開啟側邊欄",
