@@ -232,4 +232,10 @@ export const zhHant: Record<keyof typeof en, string> = {
   "shot.entryContextMenu": "頁面右鍵選單",
   "shot.entryShortcut": "鍵盤快速鍵（Ctrl+Shift+S）",
   "shot.shortcutHint": "Chrome 不允許註銷快速鍵。關掉後按鍵不再有反應，但組合鍵仍會列在 chrome://extensions/shortcuts 中。",
+  "shot.toolSelect": "選取範圍",
+  "shot.toolMosaic": "馬賽克",
+  "shot.brushSmall": "細",
+  "shot.brushMedium": "中",
+  "shot.brushLarge": "粗",
+  "shot.undo": "復原",
 };

@@ -232,4 +232,10 @@ export const zhHans: Record<keyof typeof en, string> = {
   "shot.entryContextMenu": "页面右键菜单",
   "shot.entryShortcut": "键盘快捷键（Ctrl+Shift+S）",
   "shot.shortcutHint": "Chrome 不允许注销快捷键。关掉后按键不再有反应，但组合键仍会列在 chrome://extensions/shortcuts 里。",
+  "shot.toolSelect": "选区",
+  "shot.toolMosaic": "马赛克",
+  "shot.brushSmall": "细",
+  "shot.brushMedium": "中",
+  "shot.brushLarge": "粗",
+  "shot.undo": "撤销",
 };
