@@ -5,6 +5,10 @@ import { currentLocale } from "../shared/locale";
 
 export const OVERLAY_ID = "helper-shot-overlay";
 
+/** 按钮条的高度与它离选区的间距,只用于判断选区下方放不放得下。 */
+const ACTIONS_H = 30;
+const ACTIONS_GAP = 8;
+
 /** 裁剪 + 写系统剪贴板。抽成参数是为了在测试里替换掉 canvas 与剪贴板这两个不可测的依赖。 */
 export type CopyFn = (dataUrl: string, r: Rect) => Promise<void>;
 
@@ -91,11 +95,43 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
         background: rgba(0, 0, 0, 0.75); color: #fff; font: 12px system-ui, sans-serif;
         white-space: nowrap; pointer-events: none;
       }
+      .actions { position: absolute; display: none; gap: 8px; }
+      .actions button {
+        all: unset; box-sizing: border-box; cursor: pointer;
+        width: 28px; height: 28px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        color: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+        transition: transform 0.08s ease;
+      }
+      .actions button:hover { transform: scale(1.08); }
+      .actions button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+      /* 取消用红、保存用扩展主题色(src/index.css 的 --color-accent: #2e7d72)。
+         内容脚本跑在 shadow DOM 里,拿不到面板那套 CSS 变量,只能写死值——
+         哪天改主题色,这里得跟着改。红色沿用 showToast 报错的同一族色,
+         免得同一个覆盖层里冒出两种不一样的红。 */
+      .actions .cancel { background: rgba(178, 38, 38, 0.94); }
+      .actions .cancel:hover { background: rgba(198, 52, 52, 0.96); }
+      .actions .save { background: #2e7d72; }
+      .actions .save:hover { background: #35908a; }
     </style>
     <div class="surface" data-shot-surface>
       <div class="mask" data-shot-mask></div>
       <div class="sel" data-shot-sel></div>
       <div class="size" data-shot-size></div>
+      <div class="actions" data-shot-actions>
+        <button type="button" class="cancel" data-shot-cancel>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+        <button type="button" class="save" data-shot-save>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 12.5l5.5 5.5L20 7" />
+          </svg>
+        </button>
+      </div>
     </div>
   `;
 
@@ -103,11 +139,78 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   const mask = root.querySelector<HTMLElement>("[data-shot-mask]")!;
   const sel = root.querySelector<HTMLElement>("[data-shot-sel]")!;
   const size = root.querySelector<HTMLElement>("[data-shot-size]")!;
+  const actions = root.querySelector<HTMLElement>("[data-shot-actions]")!;
+  const saveBtn = root.querySelector<HTMLElement>("[data-shot-save]")!;
+  const cancelBtn = root.querySelector<HTMLElement>("[data-shot-cancel]")!;
+
+  // showOverlay 必须同步(它跑在消息回调里,晚一拍遮罩就慢一拍),而读语言是异步的。
+  // 所以先按英文渲染,拿到设置后再回填:按钮真正露面要等用户拖完选区,那时候这次
+  // storage 读取早就回来了,不会看到文案跳变。读失败就一直是英文——有按钮可点,
+  // 远好过为了等文案把整个覆盖层卡住。
+  let loc: Locale = "en";
+  // 按钮里只有图标没有文字,所以文案得挂在 aria-label(读屏的可访问名)和 title
+  // (鼠标悬停提示)上。两者缺一:少了 aria-label 读屏只会念出「按钮」,少了 title
+  // 用户就得靠猜图标含义。svg 上标了 aria-hidden,免得它把可访问名搅乱。
+  function paintLabels(): void {
+    for (const [btn, key] of [
+      [saveBtn, "action.save"],
+      [cancelBtn, "action.cancel"],
+    ] as const) {
+      const text = translate(loc, key);
+      btn.setAttribute("aria-label", text);
+      btn.setAttribute("title", text);
+    }
+  }
+  paintLabels();
+  void currentLocale()
+    .then((l) => {
+      loc = l;
+      paintLabels();
+    })
+    .catch(() => {});
   // 用 style 赋值而不是写进 innerHTML:dataUrl 很长,拼进模板串既难读又容易被
   // 里面的引号打断。
   surface.style.backgroundImage = `url("${dataUrl}")`;
 
   let start: { x: number; y: number } | null = null;
+  // 已框好、等用户点保存的选区。null 表示还没框(或刚被取消/重新开拖)。
+  let pending: Rect | null = null;
+
+  /** 把按钮条贴到选区右下角外侧;下方放不下就收进选区内部,免得按钮跑到视口外点不到。 */
+  function placeActions(r: Rect): void {
+    actions.style.display = "flex";
+    const below = r.y + r.h + ACTIONS_GAP;
+    const fitsBelow = below + ACTIONS_H <= window.innerHeight;
+    actions.style.top = `${fitsBelow ? below : Math.max(0, r.y + r.h - ACTIONS_H - ACTIONS_GAP)}px`;
+    // 右对齐到选区右边缘:用 right 而不是 left,按钮条不用知道自己有多宽。
+    actions.style.left = "auto";
+    actions.style.right = `${Math.max(0, window.innerWidth - (r.x + r.w))}px`;
+  }
+
+  function clearPending(): void {
+    pending = null;
+    actions.style.display = "none";
+  }
+  // 立刻把隐藏写成内联样式。样式表里那条 display:none 只负责「JS 还没跑到时别闪一下」,
+  // 之后按钮的显隐一律由内联样式说了算——两个地方各管一半,迟早对不上。
+  clearPending();
+
+  /** 用户确认保存:把待定选区交给 copy,拷完拆除覆盖层。 */
+  function commit(): void {
+    if (!pending) return;
+    const r = pending;
+    clearPending();
+    // 记下发起这次拷贝时「当前」是哪个覆盖层:copy 是异步的,等它跑完时用户可能
+    // 已经又触发了一次截图,live 换成了新的覆盖层。这里只能拆自己发起时的那个,
+    // 不能无脑拆「此刻的」live,否则会把刚出现的新覆盖层拆掉。
+    const mine = live;
+    // 不在这里算缩放比:真正的比例要拿解码后的位图宽度才知道,由 copy 内部计算。
+    void copy(dataUrl, r)
+      .catch(() => {}) // 失败的提示由 copy 自己弹 toast;这里吞掉避免未处理的 rejection
+      .finally(() => {
+        if (live === mine) hideOverlay();
+      });
+  }
 
   function paint(r: Rect): void {
     // 选区自己的 box-shadow 已经压暗四周了,两层遮罩叠加会过黑。
@@ -134,20 +237,17 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
       hideOverlay(); // 点一下不拖 = 想取消
       return;
     }
-    // 记下发起这次拷贝时「当前」是哪个覆盖层:copy 是异步的,等它跑完时用户可能
-    // 已经又触发了一次截图,live 换成了新的覆盖层。这里只能拆自己发起时的那个,
-    // 不能无脑拆「此刻的」live,否则会把刚出现的新覆盖层拆掉。
-    const mine = live;
-    // 不在这里算缩放比:真正的比例要拿解码后的位图宽度才知道,由 copy 内部计算。
-    void copy(dataUrl, r)
-      .catch(() => {}) // 失败也要拆除;结果提示留给 Task 8,这里先吞掉避免出现未处理的 rejection
-      .finally(() => {
-        if (live === mine) hideOverlay();
-      });
+    // 松手不再直接写剪贴板,而是把选区停在这里等用户确认。写入改到「点保存」那一刻,
+    // 对剪贴板反而更稳:按钮点击本身就是一次全新的用户手势,而且此刻页面必然聚焦
+    // (用户刚点了页面里的按钮),Clipboard API 的两个前提都自然满足。
+    pending = r;
+    placeActions(r);
   }
 
   surface.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return; // 右键留给取消
+    // 重新开拖 = 对上一个选区不满意。先把按钮收起来,否则它会悬在半空挡着新选区。
+    clearPending();
     start = { x: e.clientX, y: e.clientY };
     e.preventDefault();
   });
@@ -167,6 +267,12 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   const onWindowMouseUp = (e: MouseEvent) => endDrag(e.clientX, e.clientY);
   window.addEventListener("mouseup", onWindowMouseUp);
 
+  // 按钮浮在 surface 上方,mousedown 会冒泡到上面那个「开始框选」的监听器。不拦住的话,
+  // 点保存的那一下会先把选区重置成一个 0×0 的新起点,保存下去的就不是用户框的东西了。
+  actions.addEventListener("mousedown", (e) => e.stopPropagation());
+  saveBtn.addEventListener("click", () => commit());
+  cancelBtn.addEventListener("click", () => hideOverlay());
+
   surface.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     hideOverlay();
@@ -176,6 +282,13 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     if (e.key === "Escape") {
       e.stopPropagation();
       hideOverlay();
+      return;
+    }
+    // Enter 等同于点保存,但只在已经框好、正等确认时才算数——没有选区时按回车
+    // 应该什么都不发生,而不是拆掉覆盖层或存一张空图。
+    if (e.key === "Enter" && pending) {
+      e.stopPropagation();
+      commit();
     }
   };
   // 捕获阶段绑在 document 上:页面自己可能在冒泡阶段吞掉 Esc。

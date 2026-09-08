@@ -25,6 +25,28 @@ function drag(from: [number, number], to: [number, number]) {
   surface.dispatchEvent(new MouseEvent("mouseup", { clientX: to[0], clientY: to[1], bubbles: true }));
 }
 
+/** 待确认态的按钮条。拖出有效选区前它是隐藏的。 */
+function actions(): HTMLElement | null {
+  return host()?.shadowRoot?.querySelector<HTMLElement>("[data-shot-actions]") ?? null;
+}
+
+function actionsVisible(): boolean {
+  const el = actions();
+  return !!el && el.style.display !== "none";
+}
+
+function clickSave(): void {
+  host()!.shadowRoot!.querySelector<HTMLElement>("[data-shot-save]")!.dispatchEvent(
+    new MouseEvent("click", { bubbles: true }),
+  );
+}
+
+function clickCancel(): void {
+  host()!.shadowRoot!.querySelector<HTMLElement>("[data-shot-cancel]")!.dispatchEvent(
+    new MouseEvent("click", { bubbles: true }),
+  );
+}
+
 describe("screenshotOverlay", () => {
   beforeEach(() => {
     // 先拆掉上一个用例可能留下的覆盖层,再重置 overflow——顺序反了会被 hideOverlay
@@ -63,11 +85,100 @@ describe("screenshotOverlay", () => {
     expect(copy).not.toHaveBeenCalled();
   });
 
-  it("拖出有效选区后按归一化矩形调用 copy", () => {
+  it("拖出有效选区后不立刻复制，而是浮出保存/取消按钮", () => {
+    const copy = vi.fn(async () => {});
+    showOverlay(DATA_URL, copy);
+    expect(actionsVisible()).toBe(false); // 还没框选,按钮不该露面
+    drag([100, 200], [50, 80]);
+    expect(copy).not.toHaveBeenCalled();
+    expect(actionsVisible()).toBe(true);
+  });
+
+  it("保存/取消是图标按钮，但必须留下可访问名——纯图标没有文字,读屏和悬停提示只能靠它", () => {
+    showOverlay(DATA_URL, vi.fn(async () => {}));
+    const root = host()!.shadowRoot!;
+    for (const sel of ["[data-shot-save]", "[data-shot-cancel]"]) {
+      const btn = root.querySelector<HTMLElement>(sel)!;
+      expect(btn.getAttribute("aria-label")).toBeTruthy();
+      expect(btn.getAttribute("title")).toBeTruthy();
+      // 画的是图标而不是文字:按钮里得有 svg。
+      expect(btn.querySelector("svg")).not.toBeNull();
+    }
+  });
+
+  it("点保存才按归一化矩形把选区写进剪贴板", () => {
     const copy = vi.fn(async () => {});
     showOverlay(DATA_URL, copy);
     drag([100, 200], [50, 80]);
+    clickSave();
     expect(copy).toHaveBeenCalledWith(DATA_URL, { x: 50, y: 80, w: 50, h: 120 });
+  });
+
+  it("点取消不复制，直接拆除覆盖层", () => {
+    const copy = vi.fn(async () => {});
+    showOverlay(DATA_URL, copy);
+    drag([100, 200], [50, 80]);
+    clickCancel();
+    expect(copy).not.toHaveBeenCalled();
+    expect(host()).toBeNull();
+  });
+
+  it("待确认时再拖一次可以重选，保存用的是新选区", () => {
+    const copy = vi.fn(async () => {});
+    showOverlay(DATA_URL, copy);
+    drag([100, 200], [50, 80]);
+    drag([10, 10], [30, 40]); // 不满意,重新拉一个
+    clickSave();
+    expect(copy).toHaveBeenCalledTimes(1);
+    expect(copy).toHaveBeenCalledWith(DATA_URL, { x: 10, y: 10, w: 20, h: 30 });
+  });
+
+  it("重新开始拖拽时按钮先收起来，免得它悬在半空挡着新选区", () => {
+    const copy = vi.fn(async () => {});
+    showOverlay(DATA_URL, copy);
+    drag([100, 200], [50, 80]);
+    expect(actionsVisible()).toBe(true);
+    const surface = host()!.shadowRoot!.querySelector("[data-shot-surface]")!;
+    surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 10, clientY: 10, button: 0, bubbles: true }));
+    expect(actionsVisible()).toBe(false);
+  });
+
+  it("按在保存按钮上不会被当成开始一次新框选", () => {
+    // 按钮浮在 surface 上方,mousedown 会冒泡到 surface 的监听器。若不拦住,
+    // 点保存的那一下会先把选区清成一个 0×0 的新起点,保存下去的就不是用户框的东西。
+    const copy = vi.fn(async () => {});
+    showOverlay(DATA_URL, copy);
+    drag([100, 200], [50, 80]);
+    host()!
+      .shadowRoot!.querySelector<HTMLElement>("[data-shot-save]")!
+      .dispatchEvent(new MouseEvent("mousedown", { clientX: 105, clientY: 205, button: 0, bubbles: true }));
+    clickSave();
+    expect(copy).toHaveBeenCalledWith(DATA_URL, { x: 50, y: 80, w: 50, h: 120 });
+  });
+
+  it("待确认时按 Enter 等同于点保存", () => {
+    const copy = vi.fn(async () => {});
+    showOverlay(DATA_URL, copy);
+    drag([100, 200], [50, 80]);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(copy).toHaveBeenCalledWith(DATA_URL, { x: 50, y: 80, w: 50, h: 120 });
+  });
+
+  it("还没框选时按 Enter 什么也不做", () => {
+    const copy = vi.fn(async () => {});
+    showOverlay(DATA_URL, copy);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(copy).not.toHaveBeenCalled();
+    expect(host()).not.toBeNull();
+  });
+
+  it("待确认时按 Esc 取消，不复制", () => {
+    const copy = vi.fn(async () => {});
+    showOverlay(DATA_URL, copy);
+    drag([100, 200], [50, 80]);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(copy).not.toHaveBeenCalled();
+    expect(host()).toBeNull();
   });
 
   it("选区太小视为误点：不复制，直接拆除", () => {
@@ -119,6 +230,7 @@ describe("screenshotOverlay", () => {
     const copy = vi.fn(async () => {});
     showOverlay(DATA_URL, copy);
     drag([100, 200], [50, 80]);
+    clickSave();
     expect(host()).not.toBeNull();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(host()).toBeNull();
@@ -130,6 +242,7 @@ describe("screenshotOverlay", () => {
     });
     showOverlay(DATA_URL, copy);
     drag([100, 200], [50, 80]);
+    clickSave();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(host()).toBeNull();
   });
@@ -147,7 +260,8 @@ describe("screenshotOverlay", () => {
         }),
     );
     showOverlay(DATA_URL, firstCopy);
-    drag([100, 200], [50, 80]); // 触发 firstCopy,promise 挂起未完成
+    drag([100, 200], [50, 80]);
+    clickSave(); // 触发 firstCopy,promise 挂起未完成
     expect(firstCopy).toHaveBeenCalledTimes(1);
 
     const secondCopy = vi.fn(async () => {});
@@ -182,12 +296,14 @@ describe("screenshotOverlay", () => {
     const surface = host()!.shadowRoot!.querySelector("[data-shot-surface]")!;
     surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 100, clientY: 200, button: 0, bubbles: true }));
     window.dispatchEvent(new MouseEvent("mouseup", { clientX: 50, clientY: 80 }));
-    expect(copy).toHaveBeenCalledWith(DATA_URL, { x: 50, y: 80, w: 50, h: 120 });
-    expect(copy).toHaveBeenCalledTimes(1);
+    // 拖拽确实结束了:进入待确认态,按钮浮出来。
+    expect(actionsVisible()).toBe(true);
     // 再补一次 window mouseup,确认不会被当成新的一次松开重复处理(此时 start
-    // 已经是 null,应该被 endDrag 的判空短路掉)。
+    // 已经是 null,应该被 endDrag 的判空短路掉),选区不会被改写。
     window.dispatchEvent(new MouseEvent("mouseup", { clientX: 999, clientY: 999 }));
+    clickSave();
     expect(copy).toHaveBeenCalledTimes(1);
+    expect(copy).toHaveBeenCalledWith(DATA_URL, { x: 50, y: 80, w: 50, h: 120 });
   });
 });
 
