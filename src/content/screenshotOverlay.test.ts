@@ -341,6 +341,27 @@ describe("screenshotOverlay", () => {
     expect(document.querySelectorAll(`#${OVERLAY_ID}`).length).toBe(1);
   });
 
+  it("解码失败:弹出复制失败提示并拆除覆盖层", async () => {
+    // 与其它用例共用 createImageBitmap 的全局 stub,这里临时换成会拒绝的版本,
+    // 用完照旧还原——不然后面的用例全都会跟着解码失败。
+    document.getElementById(TOAST_ID)?.remove();
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => {
+        throw new Error("decode failed");
+      }),
+    );
+    showOverlay(DATA_URL, vi.fn(async () => {}));
+    // 解码失败这条路径比其它用例多绕了几层 promise(currentLocale().catch().then(showToast)),
+    // 但都只是微任务链,一次宏任务边界(setTimeout(0))就足够把它们全部冲刷完。
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(host()).toBeNull(); // 覆盖层被拆除,而不是留着一个存不下去的空壳
+    expect(document.getElementById(TOAST_ID)).not.toBeNull(); // 用户必须被告知结果
+    expect(document.getElementById(TOAST_ID)!.shadowRoot!.textContent).toContain("Could not copy");
+
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => FAKE_BMP)); // 还原,不影响后面的用例
+  });
+
   it("右键点击取消框选:拆除覆盖层且不调用 copy", () => {
     const copy = vi.fn(async () => {});
     showOverlay(DATA_URL, copy);
@@ -465,17 +486,35 @@ describe("screenshotOverlay", () => {
     expect(copy.mock.calls[0][2].mosaics).toHaveLength(1);
   });
 
-  it("切到马赛克工具后，选区内部挂上按位图分辨率开的预览画布", async () => {
-    showOverlay(DATA_URL, vi.fn(async () => {}));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    drag([100, 200], [50, 80]);
-    expect(host()!.shadowRoot!.querySelector("[data-shot-preview]")).toBeNull();
-    clickTool("mosaic");
-    const cv = host()!.shadowRoot!.querySelector<HTMLCanvasElement>("[data-shot-preview]");
-    expect(cv).not.toBeNull();
-    // CSS 尺寸按选区(屏幕像素),后备存储按位图分辨率——预览才既清晰又与输出同源
-    expect(cv!.style.width).toBe("50px");
-    expect(cv!.style.height).toBe("120px");
+  it("框出选区后（不必等切到马赛克工具）就挂上按位图分辨率开的预览画布", async () => {
+    // 预览是否显示只取决于「有没有待定选区和底图」,不再看当前工具——选区工具下
+    // 也要看到马赛克(笔迹按位图坐标存,跟取景框无关),否则用户会在切回选区工具时
+    // 看不到已经画好的马赛克,存下去的图却带着它。所以这里断言的是「框完就有」,
+    // 不是原来那句「切到马赛克工具才有」。
+    //
+    // happy-dom 原生拿不到 2d 上下文,渲染会走进 catch 把刚挂上的画布又摘掉——
+    // 这里假造一个能用的上下文,让渲染走完整条成功路径,才测得出「挂载成功后
+    // 确实留在 DOM 里」,而不是巧合地留下一个渲染失败的画布(那是下一个用例
+    // 要测的场景)。
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    try {
+      showOverlay(DATA_URL, vi.fn(async () => {}));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      drag([100, 200], [50, 80]);
+      let cv = host()!.shadowRoot!.querySelector<HTMLCanvasElement>("[data-shot-preview]");
+      expect(cv).not.toBeNull();
+      // CSS 尺寸按选区(屏幕像素),后备存储按位图分辨率——预览才既清晰又与输出同源
+      expect(cv!.style.width).toBe("50px");
+      expect(cv!.style.height).toBe("120px");
+      // 切到马赛克工具不改变这一点——预览本来就已经在了,不是切工具才生效。
+      clickTool("mosaic");
+      cv = host()!.shadowRoot!.querySelector<HTMLCanvasElement>("[data-shot-preview]");
+      expect(cv).not.toBeNull();
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
   it("预览渲染抛错不会连累覆盖层——happy-dom 拿不到 2d 上下文，正好当这个场景", async () => {
@@ -501,7 +540,10 @@ describe("screenshotOverlay", () => {
   it("Ctrl+Z 与点撤销等价", async () => {
     const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
     await paintOne(copy);
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
+    // 大写 "Z" 加 shiftKey——真实的 Ctrl+Shift+Z/大写锁定场景下 e.key 就是这样,
+    // 逼着实现真的走一遍 .toLowerCase() 才能匹配上。之前这里直接派发已经是
+    // 小写的 "z",不管有没有 .toLowerCase() 都能通过,测不出归一化到底生效没生效。
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Z", ctrlKey: true, shiftKey: true, bubbles: true }));
     clickSave();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(copy.mock.calls[0][2].mosaics).toHaveLength(0);
@@ -519,7 +561,10 @@ describe("screenshotOverlay", () => {
     expect(undoBtn().disabled).toBe(false);
   });
 
-  it("撤销到空之后再撤销不报错，也不会把覆盖层拆掉", async () => {
+  it("撤销到空之后再撤销、再按 Ctrl+Z：不抛错，覆盖层不消失", async () => {
+    // 注意这个名字刻意没提 isEmpty 守卫:undo() 对空数组 slice(0,-1) 本来就还是
+    // 空数组，就算 doUndo() 里去掉 isEmpty 判断，这里断言的「不抛错」照样成立——
+    // 这个用例锁定的只是「重复撤销不炸」这个可观察行为，不是守卫本身的必要性。
     const copy = vi.fn(async () => {});
     await paintOne(copy);
     clickUndo();

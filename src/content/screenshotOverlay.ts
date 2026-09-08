@@ -22,8 +22,10 @@ import { createToolbar, type Tool } from "./overlay/toolbar";
 
 export const OVERLAY_ID = "helper-shot-overlay";
 
-/** 按钮条的高度与它离选区的间距,只用于判断选区下方放不放得下。 */
-const ACTIONS_H = 30;
+/** 按钮条的高度与它离选区的间距,只用于判断选区下方放不放得下。
+ * 5px 内边距 × 2 + 26px 按钮 = 36,和 .toolbar 的实际渲染高度对齐——量小了会导致
+ * 「贴下方」判定得过晚,按钮条在不该露出来的地方戳出视口。 */
+const ACTIONS_H = 36;
 const ACTIONS_GAP = 8;
 
 /**
@@ -195,10 +197,20 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     return b.w === 0 || b.h === 0 ? null : b;
   }
 
-  /** 重画预览。渲染失败(取不到 2d 上下文等)只隐藏预览,绝不把覆盖层带崩。 */
-  function refreshPreview(): void {
+  /**
+   * 重画预览。渲染失败(取不到 2d 上下文等)只隐藏预览,绝不把覆盖层带崩。
+   *
+   * 只看「有没有待定选区和底图」,不看当前工具——选区工具下也必须画,因为笔迹是
+   * 按位图坐标存的,切回选区工具只是换个取景框,已经画的马赛克并不会消失,
+   * 保存时还是会连它一起存下来。预览要是被工具切换隐藏,用户就会在看不见马赛克
+   * 的情况下把带马赛克的图存下去——这正是这套架构要杜绝的「所见非所得」。
+   *
+   * partial:正在拖拽、还没落进 ops 里的那一笔(见下面 mousemove 的实时重画),
+   * 只用于渲染,不写回 ops——手一松才由 endDrag 正式 pushStroke。
+   */
+  function refreshPreview(partial?: Stroke): void {
     const bmp = live?.bmp;
-    if (tool !== "mosaic" || !pending || !bmp) {
+    if (!pending || !bmp) {
       hidePreview();
       return;
     }
@@ -210,7 +222,10 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     // 画布的挂载与尺寸只取决于选区,跟下面的渲染成败无关——先摆好,再去尝试画,
     // 这样即使画布是空的(比如 happy-dom 测试环境根本拿不到 2d 上下文),
     // 挂载状态和尺寸计算依然是正确、可验证的。
-    surface.append(preview);
+    // 插在 .sel 前面而不是 append 到最后:DOM 序决定层叠顺序,预览要是叠在
+    // .sel/.size/工具栏上面,选区的白边框、尺寸标签和按钮条就都被它盖住了——
+    // 插在最前面,让 .sel 的边框、.size 的标签和工具栏都保持在预览之上。
+    surface.insertBefore(preview, sel);
     // CSS 尺寸贴合选区(屏幕像素),后备存储是位图分辨率(见下面 preview.width/height)——
     // 这就是预览既清晰又与输出同源的原因。
     preview.style.left = `${pending.x}px`;
@@ -222,7 +237,8 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
       if (pixCache?.key !== key) pixCache = { key, canvas: pixelateCrop(bmp, b) };
       // 与保存路径同一个 renderAnnotated——预览就是最终图像本身,只是缩小显示,
       // 不是另起一套近似绘制,这样用户看到的和存下来的才不会走样。
-      const out = renderAnnotated(bmp, b, ops, pixCache.canvas);
+      const renderOps = partial ? pushStroke(ops, partial) : ops;
+      const out = renderAnnotated(bmp, b, renderOps, pixCache.canvas);
       const ctx = preview.getContext("2d");
       if (!ctx) throw new Error("2d context unavailable");
       preview.width = out.width;
@@ -231,7 +247,9 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
       preview.style.display = "block";
     } catch (e) {
       console.error("preview render failed", e);
-      preview.style.display = "none";
+      // 渲染失败时也要走 hidePreview(),而不是只改 display:none——不然预览画布
+      // 会作为一个隐藏节点留在 DOM 里,违背「没得可预览就整个摘掉」的约定。
+      hidePreview();
     }
   }
 
@@ -278,7 +296,15 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
       }
       // 已经在保存路径上:位图归 commit 所有,这里不能再把它挂回 live.bmp,
       // 否则一次晚到的 hideOverlay 会把 copy 正用着的位图关掉。
-      if (!committing) live.bmp = decoded;
+      if (!committing) {
+        live.bmp = decoded;
+        // 解码是异步的,用户完全可能在它落地前就已经框好选区、切到马赛克工具——
+        // 那时 refreshPreview 已经因为 bmp 还是 null 而跑过一次并隐藏了预览,
+        // 之后没有别的东西会再触发它。这里晚到的一次赋值必须自己顺手补一次重画,
+        // 否则预览会一直空着、涂抹也会因为拿不到 bmp 而静默丢笔迹,直到用户
+        // 恰好再切一次工具才碰巧刷新。
+        refreshPreview();
+      }
       return decoded;
     })
     .catch((e) => {
@@ -325,7 +351,17 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   /** 用户确认保存:把待定选区交给 copy,拷完拆除覆盖层。 */
   function commit(): void {
     if (!pending) return;
+    // 重入守卫:拷贝进行中(committing === true)时,位图已经交出去了,live.bmp
+    // 是 null。再次点保存(或者 Enter 又被触发一次)不该再跑一遍——第二次的
+    // renderAnnotated 会在一个可能已经 detach 的位图上作画,静默退化成「复制失败」。
+    if (committing) return;
     const r = pending;
+    // ops 必须在这里原地快照:下面 committing=true 之后、bmpReady 的 .then 真正
+    // 读到 ops 之前还隔着至少一次微任务。这段窗口期里键盘事件仍能触发撤销——例如
+    // 撤销按钮 Enter 激活的 click 和 document 的 keydown 处理器同一个任务里前后
+    // 触发,后者已经 commit() 过了。如果直接闭包读 ops,读到的就是被截胡后缩短的
+    // 那一份;拍成快照传下去,才是用户点保存那一刻真正看到的操作列表。
+    const opsAtCommit = ops;
     clearPending();
     // 记下发起这次拷贝时「当前」是哪个覆盖层:copy 是异步的,等它跑完时用户可能
     // 已经又触发了一次截图,live 换成了新的覆盖层。这里只能拆自己发起时的那个,
@@ -345,7 +381,7 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
       .then((bmp) => {
         if (!bmp) return; // 覆盖层已经换人,这次保存作废
         bmpForCommit = bmp;
-        return copy(bmp, r, ops);
+        return copy(bmp, r, opsAtCommit);
       })
       .catch(() => {}) // 失败的提示由 copy 自己弹 toast;这里吞掉避免未处理的 rejection
       .finally(() => {
@@ -407,6 +443,10 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
 
   surface.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return; // 右键留给取消
+    // 拷贝进行中:位图已经交给 commit,live.bmp 是 null。这时开始新的框选或涂抹,
+    // 涂抹会因为 bmp 拿不到而在 endDrag 里默默把这一笔丢掉、框选会显示一个预览
+    // 不了了之的选区——两种体验都是「悄悄失败」,不如干脆连拖拽都不让开始。
+    if (committing) return;
     if (tool === "mosaic" && pending) {
       // 马赛克工具下拖动是涂抹,不动选区。没有选区时不该能涂——涂到哪儿都不会被保存。
       painting = [{ x: e.clientX, y: e.clientY }];
@@ -419,9 +459,37 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     e.preventDefault();
   });
 
+  // 涂抹时按帧重画,而不是每个 mousemove 都重画:renderAnnotated 每次调用都要
+  // 分配三张裁剪尺寸的画布,一个接近全屏的选区上逐 mousemove 同步重画会明显卡顿。
+  // pixelateCrop 那份缓存已经解决了「像素化底图」的重算问题,这里用 rAF 把「合成
+  // 蒙版」这一步也限到每帧最多一次——多余的中间点被丢弃,不会丢的是最后一次。
+  let paintRaf: number | null = null;
+  function schedulePaintPreview(): void {
+    if (paintRaf !== null) return;
+    paintRaf = requestAnimationFrame(() => {
+      paintRaf = null;
+      // 排队等到这一帧才发现拖拽已经结束(painting 已被 endDrag 置空):那次
+      // 重画交给 endDrag 里的 afterOpsChanged() 负责,这里直接跳过,避免拿一份
+      // 过期的部分轨迹去重画一次没有意义的帧。
+      if (!painting) return;
+      const bmp = live?.bmp;
+      if (!bmp) return;
+      // 正在拖的这一笔还没定稿、没进 ops,但预览必须现在就看得见——不然「画面
+      // 就是要保存的东西」这条约定在拖拽过程中会被打破。换算方式和 endDrag 落定
+      // 时完全一致,只是这里的结果只用于渲染,不写回 ops。
+      const scale = bitmapScale(bmp.width, window.innerWidth);
+      const s: Stroke = {
+        points: painting.map((p) => toBitmapPt(p, scale)),
+        radius: brushRadius(brush, scale),
+      };
+      refreshPreview(s);
+    });
+  }
+
   surface.addEventListener("mousemove", (e) => {
     if (painting) {
       painting.push({ x: e.clientX, y: e.clientY });
+      schedulePaintPreview();
       return;
     }
     if (!start) return;
@@ -490,7 +558,12 @@ export async function copyRegion(bmp: ImageBitmap, r: Rect, ops: Ops): Promise<v
     const scale = bitmapScale(bmp.width, window.innerWidth);
     const b = toBitmapRect(r, scale, bmp.width, bmp.height);
     if (b.w === 0 || b.h === 0) return; // 选区完全落在图外,当取消,不提示
-    const canvas = renderAnnotated(bmp, b, ops, pixelateCrop(bmp, b));
+    // 没有笔迹是最常见的情形(框完选区直接保存,没碰马赛克工具)。renderAnnotated
+    // 在 ops 为空时根本不看 pix 参数就提前返回,但 pixelateCrop 本身要分配两张
+    // 裁剪尺寸的画布并做一次缩小再放大——4K 截图上这是几十 MB 的白费功夫。
+    // 只在真有笔迹时才算它,空画布当占位符,反正用不上。
+    const pix = isEmpty(ops) ? document.createElement("canvas") : pixelateCrop(bmp, b);
+    const canvas = renderAnnotated(bmp, b, ops, pix);
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
     if (!blob) throw new Error("toBlob returned null");
     // 只能写 image/png:Chrome 的 ClipboardItem 只稳定支持这一种图片类型。

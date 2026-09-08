@@ -231,7 +231,7 @@ export const en = {
   "shot.entryShortcut": "Keyboard shortcut (Ctrl+Shift+S)",
   "shot.shortcutHint": "Chrome does not allow unregistering a shortcut. Turning it off makes it do nothing; the key combination still appears on chrome://extensions/shortcuts.",
   "shot.toolSelect": "Select area",
-  "shot.toolMosaic": "Blur out",
+  "shot.toolMosaic": "Pixelate",
   "shot.brushSmall": "Small brush",
   "shot.brushMedium": "Medium brush",
   "shot.brushLarge": "Large brush",

@@ -74,6 +74,10 @@ describe("brushRadius", () => {
     expect(BRUSH_CSS_RADIUS.medium).toBeLessThan(BRUSH_CSS_RADIUS.large);
   });
 
+  it("三档的 CSS 半径钉死在约定的具体数值上——只校验顺序和比例,一个打错的常量也能蒙混过关", () => {
+    expect(BRUSH_CSS_RADIUS).toEqual({ small: 8, medium: 16, large: 28 });
+  });
+
   it("默认档是中", () => {
     expect(DEFAULT_BRUSH).toBe("medium");
   });
