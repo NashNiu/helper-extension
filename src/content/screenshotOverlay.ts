@@ -5,9 +5,7 @@ import {
   DEFAULT_BRUSH,
   emptyOps,
   isEmpty,
-  pixelateCrop,
   pushStroke,
-  renderAnnotated,
   toBitmapPt,
   undo as undoOps,
   type BrushSize,
@@ -15,6 +13,7 @@ import {
   type Pt,
   type Stroke,
 } from "../shared/capture/annotate";
+import { pixelateCrop, renderAnnotated } from "../shared/capture/render";
 import { SHOW_OVERLAY, type ShowOverlayMsg } from "../shared/capture/messages";
 import { translate, type Locale } from "../i18n/core";
 import { currentLocale } from "../shared/locale";
