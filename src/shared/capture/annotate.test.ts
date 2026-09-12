@@ -22,8 +22,13 @@ import {
   lineWidth,
   fontSize,
   arrowHead,
+  fontString,
+  hitTest,
+  textBox,
   type Op,
   type Ops,
+  type Measure,
+  type TextOp,
 } from "./annotate";
 
 const M = (id: string): Op => ({ kind: "mosaic", id, points: [{ x: 1, y: 1 }], radius: 3 });
@@ -251,6 +256,54 @@ describe("arrowHead", () => {
 
   it("起终点重合时返回 null——零长度算不出方向", () => {
     expect(arrowHead({ x: 5, y: 5 }, { x: 5, y: 5 }, 4)).toBeNull();
+  });
+});
+
+describe("文字度量与命中判定", () => {
+  /** 确定性假度量:每个字符 10 像素宽,与字号无关,方便手算期望值。 */
+  const measure: Measure = (t) => t.length * 10;
+  const TX = (id: string, x: number, y: number, text: string): TextOp => ({
+    kind: "text", id, at: { x, y }, text, color: "red", fontPx: 20,
+  });
+
+  it("fontString 把字号嵌进同一个字体串——度量和绘制必须用同一个串", () => {
+    expect(fontString(20)).toContain("20px");
+    expect(fontString(20)).toBe(fontString(20));
+  });
+
+  it("文字盒宽度来自度量，高度是字号的 1.25 倍", () => {
+    expect(textBox(TX("op-1", 5, 7, "abc"), measure)).toEqual({ x: 5, y: 7, w: 30, h: 25 });
+  });
+
+  it("空文字的盒子宽度为 0——刚点出光标还没打字时不该占地方", () => {
+    expect(textBox(TX("op-1", 0, 0, ""), measure).w).toBe(0);
+  });
+
+  it("点在文字正中命中它", () => {
+    expect(hitTest([TX("op-1", 100, 100, "abc")], { x: 110, y: 110 }, measure)?.id).toBe("op-1");
+  });
+
+  it("点在远处不命中", () => {
+    expect(hitTest([TX("op-1", 100, 100, "abc")], { x: 500, y: 500 }, measure)).toBeNull();
+  });
+
+  it("命中范围四周放宽，细字才点得中——正好贴着盒子外沿也算", () => {
+    // fontPx=20 → 放宽 max(4, 5) = 5
+    expect(hitTest([TX("op-1", 100, 100, "abc")], { x: 96, y: 98 }, measure)?.id).toBe("op-1");
+    expect(hitTest([TX("op-1", 100, 100, "abc")], { x: 90, y: 98 }, measure)).toBeNull();
+  });
+
+  it("重叠时取列表里靠后的那条——后画的在上面，点中的应该是看得见的那条", () => {
+    const list = [TX("op-1", 100, 100, "abc"), TX("op-2", 100, 100, "xyz")];
+    expect(hitTest(list, { x: 110, y: 110 }, measure)?.id).toBe("op-2");
+  });
+
+  it("只认文字，矩形和箭头挡在上面也不算命中", () => {
+    const list: Op[] = [
+      { kind: "rect", id: "op-9", r: { x: 0, y: 0, w: 999, h: 999 }, color: "red", width: 2 },
+      TX("op-1", 100, 100, "abc"),
+    ];
+    expect(hitTest(list, { x: 110, y: 110 }, measure)?.id).toBe("op-1");
   });
 });
 

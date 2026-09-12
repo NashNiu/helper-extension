@@ -177,3 +177,52 @@ export function arrowHead(from: Pt, to: Pt, width: number): [Pt, Pt, Pt] | null 
   });
   return [{ x: to.x, y: to.y }, wing(1), wing(-1)];
 }
+
+/**
+ * 文字的字体串。**度量与绘制必须用同一个串**,两处各拼一遍迟早会漂移,
+ * 那会让命中范围和看到的文字对不上。
+ *
+ * 加粗是因为标注文字常常压在花哨的背景上,细体几乎读不出来。
+ */
+export function fontString(fontPx: number): string {
+  return `bold ${fontPx}px -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif`;
+}
+
+/** 文字宽度的度量。由调用方注入:生产环境包一层 measureText,测试注入确定性实现。 */
+export type Measure = (text: string, fontPx: number) => number;
+
+/** 行高系数。1.25 是常见的正文行高,够容纳中文的上下伸展。 */
+const LINE_HEIGHT = 1.25;
+
+export function textBox(op: TextOp, measure: Measure): Rect {
+  return {
+    x: op.at.x,
+    y: op.at.y,
+    w: measure(op.text, op.fontPx),
+    h: Math.round(op.fontPx * LINE_HEIGHT),
+  };
+}
+
+/**
+ * 找出点在哪条文字上。没有就返回 null。
+ *
+ * 从后往前找:列表靠后的后画、盖在上面,用户点中的应该是看得见的那条。
+ */
+export function hitTest(list: Op[], p: Pt, measure: Measure): TextOp | null {
+  for (let i = list.length - 1; i >= 0; i--) {
+    const op = list[i];
+    if (op.kind !== "text") continue;
+    const box = textBox(op, measure);
+    // 四周放宽,否则又细又矮的文字几乎点不中。
+    const pad = Math.max(4, Math.round(op.fontPx * 0.25));
+    if (
+      p.x >= box.x - pad &&
+      p.x <= box.x + box.w + pad &&
+      p.y >= box.y - pad &&
+      p.y <= box.y + box.h + pad
+    ) {
+      return op;
+    }
+  }
+  return null;
+}
