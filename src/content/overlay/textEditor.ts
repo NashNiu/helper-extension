@@ -14,7 +14,6 @@ export interface TextEditor {
   commit(): void;
   isEditing(): boolean;
   draft(): Draft | null;
-  moveTo(at: Pt): void;
 }
 
 /**
@@ -66,6 +65,9 @@ export function createTextEditor(
   }
 
   el.addEventListener("input", sync);
+  // 方向键、Home/End、鼠标拖选都会挪动 selectionStart 但不触发 input——不补这一句,
+  // 光标就只在下一次真正敲字时才跟着挪对,这之前画布画的插入点跟真实的对不上。
+  el.addEventListener("keyup", sync);
   el.addEventListener("compositionstart", () => {
     composing = true;
   });
@@ -84,8 +86,13 @@ export function createTextEditor(
   el.addEventListener("keydown", (e) => {
     if (composing) return;
     if (e.key === "Enter" || e.key === "Escape") {
-      // 两个键都只作用于这次输入:覆盖层的全局处理器不该再看到它们,否则
-      // Enter 会顺带保存整张截图、Esc 会把覆盖层整个关掉。
+      // 这两行**挡不住**覆盖层的全局处理器看到 Enter/Esc:那个处理器绑在
+      // document 的捕获阶段,捕获先于目标,这里在目标阶段(input 上)调用的
+      // stopPropagation() 物理上不可能抢在它前面。真正挡住「Enter 顺带保存/
+      // Esc 顺带关闭覆盖层」的,是覆盖层 onKey 开头那句
+      // `if (editor.isEditing()) return;`。
+      // 这两行剩下的价值是:挡住页面自己在冒泡阶段挂的快捷键,以及挡表单提交——
+      // 仍然值得留着,只是不能再指望它们拦住覆盖层。
       e.stopPropagation();
       e.preventDefault();
       commit();
@@ -93,6 +100,10 @@ export function createTextEditor(
   });
 
   function begin(op: TextOp, replacesId: string | null): boolean {
+    // 复位组字标记:若上一次编辑的输入法组字没收到 compositionend 就被打断
+    // (概率很低,但确实会发生),composing 会一直停在 true,导致这次新编辑的
+    // Esc/Enter 全部失灵。begin() 是每次编辑会话的起点,在这里清零最保险。
+    composing = false;
     current = { op, replacesId, caret: op.text.length };
     el.value = op.text;
     // 位置跟着文字走,输入法候选框才会贴着文字弹,而不是飘到页面角落。
@@ -124,11 +135,5 @@ export function createTextEditor(
     commit,
     isEditing: () => current !== null,
     draft: () => current,
-    moveTo(at) {
-      if (!current) return;
-      current = { ...current, op: { ...(current.op as TextOp), at } };
-      place(at);
-      cb.onChange();
-    },
   };
 }

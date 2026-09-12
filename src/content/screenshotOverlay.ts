@@ -177,6 +177,11 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
 
   const toolbar = createToolbar({
     onTool: (t) => {
+      // 规格里「点击别处/切换工具/点保存,先定稿再执行原动作」这条,切换工具这一支
+      // 原来只靠按钮抢焦点触发 input 的 blur 来定稿——在真实 Chrome 里成立,但这是
+      // 涌现行为,不是显式契约(happy-dom 的 .click() 就不搬焦点,覆盖层层面测不到
+      // 这条规格行)。这里显式定稿一次,和「点保存」「点击 surface」两条路径对齐。
+      if (editor.isEditing()) editor.commit();
       tool = t;
       toolbar.setTool(t);
       refreshPreview();
@@ -392,7 +397,9 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   }
 
   // 按在已有文字上、还没松手。moved 一旦为真就按「拖动」处理,否则松手时进入编辑。
-  let textDown: { op: TextOp; at: Pt; moved: boolean } | null = null;
+  // cssAt 记的是按下时的 CSS 坐标,用来判「有没有位移」——判据必须是 CSS 像素而不是
+  // 取整后的位图坐标,见下面 mousemove 里的注释。
+  let textDown: { op: TextOp; at: Pt; cssAt: { x: number; y: number }; moved: boolean } | null = null;
 
   /** 把按钮条贴到选区右下角外侧;下方放不下就收进选区内部,免得按钮跑到视口外点不到。 */
   function placeActions(r: Rect): void {
@@ -478,6 +485,14 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
    * 把一次形状拖拽转成 op。拿不到位图(还没解码完)或者太小就返回 null,由调用方丢掉。
    *
    * 坐标在这里就换算成位图坐标——与 endDrag 落定时完全一致,渲染阶段不再考虑缩放。
+   *
+   * 注意:这里手工重复了 `Math.round(x * scale)`,而不是复用 `rect.ts` 的
+   * `toBitmapRect`——这是刻意的,不要「顺手」改成调用它。`toBitmapRect` 把
+   * left/top/right/bottom 各自夹到 `[0, bmpW] × [0, bmpH]`,那是**取景框**该有的
+   * 语义(裁剪参数必须落在图内)。标注矩形不是取景框:一个拖到视口左边缘外的框,
+   * 夹取后左边会被搬到 x = 0,原本看不见的那条竖边会凭空出现在选区里。不夹取
+   * 才是对的——越界部分交给裁剪画布天然裁掉,这正是「重新取景到更小范围时,
+   * 框外的标注被裁掉」这条已知限制想要的行为。
    */
   function shapeOpFrom(origin: { x: number; y: number }, toX: number, toY: number): Op | null {
     const bmp = live?.bmp;
@@ -540,7 +555,11 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     if (textDown) {
       const down = textDown;
       textDown = null;
-      const p = toBitmapPt({ x: clientX, y: clientY }, scaleNow());
+      // 与 mousedown 的守卫对齐:理论上不会发生(能走到这里,mousedown 时 bmp 已经
+      // 就绪),但防御性地保持一致,不裸调 scaleNow()。
+      const bmp = live?.bmp;
+      if (!bmp) return;
+      const p = toBitmapPt({ x: clientX, y: clientY }, bitmapScale(bmp.width, window.innerWidth));
       if (down.moved) {
         // 拖动:只挪位置,不进编辑。
         const at = { x: down.op.at.x + (p.x - down.at.x), y: down.op.at.y + (p.y - down.at.y) };
@@ -587,12 +606,17 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
       e.preventDefault();
       // 已经在编辑:这一下点击先把上一条定稿,再决定要不要开新的。
       if (editor.isEditing()) editor.commit();
+      // 位图还没解码完:马赛克(endDrag 里的 bmp 判空)、矩形/箭头(shapeOpFrom 里的
+      // `if (!bmp) return null`)都显式挡了这种情形,文字路径必须对齐——否则
+      // scaleNow() 会静默退回 1,把 CSS 坐标当位图坐标存进 op,字号也不缩放,
+      // 解码落地后这条文字会跳到点击位置左上角、字号减半,而且是静默错误。
+      if (!live?.bmp) return;
       const s = scaleNow();
       const p = toBitmapPt({ x: e.clientX, y: e.clientY }, s);
       const hit = hitTest(ops.list, p, measureText);
       if (hit) {
         // 按在已有文字上:现在还分不清是想拖动还是想改字,等松手看有没有位移。
-        textDown = { op: hit, at: p, moved: false };
+        textDown = { op: hit, at: p, cssAt: { x: e.clientX, y: e.clientY }, moved: false };
         return;
       }
       beginText(
@@ -650,9 +674,15 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
       return;
     }
     if (textDown) {
+      if (!textDown.moved) {
+        // 在 CSS 坐标上判位移,并给 3px 死区。高分屏上 scale ≈ 2,1 CSS 像素的手抖
+        // 取整到位图坐标就有 2 像素之差,零容差会把「手抖」误判成「想拖动」——
+        // 「文字可以点回去改」这个旗舰功能会在高分屏上间歇性失灵,且没有任何
+        // 视觉反馈:文字只是悄悄挪了两像素。
+        if (Math.abs(e.clientX - textDown.cssAt.x) < 3 && Math.abs(e.clientY - textDown.cssAt.y) < 3) return;
+        textDown.moved = true;
+      }
       const p = toBitmapPt({ x: e.clientX, y: e.clientY }, scaleNow());
-      if (!textDown.moved && p.x === textDown.at.x && p.y === textDown.at.y) return;
-      textDown.moved = true;
       const at = {
         x: textDown.op.at.x + (p.x - textDown.at.x),
         y: textDown.op.at.y + (p.y - textDown.at.y),

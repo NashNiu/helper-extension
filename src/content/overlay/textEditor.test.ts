@@ -110,13 +110,27 @@ describe("文字编辑器", () => {
     expect(cb.onCommit).not.toHaveBeenCalled();
   });
 
-  it("moveTo 改草稿位置并触发重画——拖动文字时要跟手", () => {
+  it("方向键等只触发 keyup 时，光标位置也要跟着更新——不然画布把光标画在错的字符之间", () => {
+    const { root, cb } = setup();
+    const ed = createTextEditor(root, cb, (p) => p);
+    ed.begin({ ...OP, text: "abcd" }, null);
+    ed.el.value = "abcd";
+    ed.el.setSelectionRange(1, 1); // 模拟左方向键把光标移到第 1 个字符前,不派发 input
+    ed.el.dispatchEvent(new KeyboardEvent("keyup", { key: "ArrowLeft", bubbles: true }));
+    expect(ed.draft()!.caret).toBe(1);
+  });
+
+  it("上一次组字没收到 compositionend 就开始编辑新文字：composing 应当复位，否则 Enter/Esc 全部失灵", () => {
     const { root, cb } = setup();
     const ed = createTextEditor(root, cb, (p) => p);
     ed.begin(OP, null);
-    ed.moveTo({ x: 99, y: 88 });
-    expect((ed.draft()!.op as TextOp).at).toEqual({ x: 99, y: 88 });
-    expect(cb.onChange).toHaveBeenCalled();
+    ed.el.dispatchEvent(new CompositionEvent("compositionstart"));
+    // 故意不派发 compositionend，composing 停在 true。
+    ed.begin({ ...OP, id: "op-2" }, null);
+    ed.el.value = "x";
+    ed.el.dispatchEvent(new Event("input"));
+    ed.el.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(cb.onCommit).toHaveBeenCalledTimes(1);
   });
 
   describe("失焦即定稿", () => {

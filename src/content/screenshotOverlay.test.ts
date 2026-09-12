@@ -596,7 +596,11 @@ describe("矩形框工具", () => {
     const op = ops.list.find((o) => o.kind === "rect");
     expect(op).toBeDefined();
     expect((op as { color: string }).color).toBe("red");
-    expect((op as { width: number }).width).toBeGreaterThan(0);
+    // FAKE_BMP.width = 2000，happy-dom 的 window.innerWidth = 1024，scale ≈ 1.953125，
+    // 默认档 medium 的 CSS 线宽是 4 → Math.round(4 * 2000 / 1024) = Math.round(7.8125) = 8。
+    // 钉死具体值——lineWidth() 有 Math.max(1, …) 兜底恒 ≥ 1，只断言 >0 空转，测不出
+    // 线宽算错、漏乘 scale 或用错档位。
+    expect((op as { width: number }).width).toBe(8);
   });
 
   it("矩形坐标是位图坐标，不是 CSS 坐标——底图宽 2000、视口宽 1024 时要放大", async () => {
@@ -626,7 +630,7 @@ describe("矩形框工具", () => {
   });
 
   it("画完矩形后撤销按钮可用，撤销后列表里没有矩形了", async () => {
-    const copy = vi.fn(async () => {});
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
     showOverlay(DATA_URL, copy);
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码——形状拖拽要用到位图
     drag([10, 10], [400, 300]);
@@ -636,6 +640,12 @@ describe("矩形框工具", () => {
     expect(undoBtn.disabled).toBe(false);
     undoBtn.click();
     expect(undoBtn.disabled).toBe(true);
+    // 光是按钮的 disabled 翻转测不出 ops 是否真的被撤销了——把 mutate 写成
+    // "压栈但不改 ops" 一样能让上面两行通过。这里补一次保存，直接看列表。
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect((copy.mock.calls[0][2] as Ops).list).toHaveLength(0);
   });
 });
 
@@ -964,5 +974,99 @@ describe("文字工具", () => {
     await Promise.resolve();
     const op = (copy.mock.calls[0][2] as Ops).list.find((o) => o.kind === "text") as { text: string };
     expect(op.text).toBe("还没按回车");
+  });
+
+  it("位图还没解码完时点文字工具：不产生 text op，也不进入编辑态", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    // 故意不等解码完成(不用 setTimeout(0))——这正是本用例要复现的场景：
+    // 位图还没就绪时，用户已经拖好选区、切到文字工具、点了一下。
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    // 没有进入编辑态：shadow root 的活动元素不是文字输入框。
+    expect(host()!.shadowRoot!.activeElement).not.toBe(textInput());
+    // 位图解码落地、点保存后，这次点击也没有留下任何 text op。
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const ops = copy.mock.calls[0][2] as Ops;
+    expect(ops.list.some((o) => o.kind === "text")).toBe(false);
+  });
+
+  it("按在文字上小幅抖动(<3 CSS 像素)后松手：仍进入编辑态，不是拖动", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "占位";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+
+    const surface = host()!.shadowRoot!.querySelector("[data-shot-surface]")!;
+    surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 100, clientY: 100, button: 0, bubbles: true }));
+    // 2 CSS 像素的手抖：换成位图坐标会有好几像素的差，但这在死区之内，不该被
+    // 判成"想拖动"。
+    surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 102, clientY: 101, bubbles: true }));
+    surface.dispatchEvent(new MouseEvent("mouseup", { clientX: 102, clientY: 101, bubbles: true }));
+
+    // 进入了编辑态：输入框拿到焦点，内容是原文字，可以接着改。
+    expect(host()!.shadowRoot!.activeElement).toBe(textInput());
+    expect(textInput().value).toBe("占位");
+  });
+
+  it("按在文字上移动 10 CSS 像素后松手：按拖动处理，不进入编辑态", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "占位";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+
+    const surface = host()!.shadowRoot!.querySelector("[data-shot-surface]")!;
+    surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 100, clientY: 100, button: 0, bubbles: true }));
+    surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 110, clientY: 100, bubbles: true }));
+    surface.dispatchEvent(new MouseEvent("mouseup", { clientX: 110, clientY: 100, bubbles: true }));
+
+    // 没有进入编辑态：远超死区的位移应当按拖动处理。
+    expect(host()!.shadowRoot!.activeElement).not.toBe(textInput());
+
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const ops = copy.mock.calls[0][2] as Ops;
+    const textOps = ops.list.filter((o) => o.kind === "text");
+    expect(textOps).toHaveLength(1); // 还是那一条文字，没有被拖丢或者复制出第二条
+    // 位图坐标下原点大约是 195(100 CSS px * scale ≈ 1.95),拖动 10 CSS 像素后应明显变大。
+    expect((textOps[0] as { at: Pt }).at.x).toBeGreaterThan(195);
+  });
+
+  it("编辑中切换工具：文字先定稿、退出编辑态，再执行切换", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "切换前";
+    textInput().dispatchEvent(new Event("input"));
+    // happy-dom 的 .click() 不会像真实浏览器那样抢走焦点，所以这里不能指望 blur
+    // 顺带定稿——必须是 onTool 自己显式 commit。
+    pickTool("rect");
+    expect(host()!.shadowRoot!.activeElement).not.toBe(textInput());
+
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const op = (copy.mock.calls[0][2] as Ops).list.find((o) => o.kind === "text") as
+      | { text: string }
+      | undefined;
+    expect(op?.text).toBe("切换前");
   });
 });
