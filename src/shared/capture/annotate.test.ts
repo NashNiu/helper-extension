@@ -11,7 +11,12 @@ import {
   brushRadius,
   BRUSH_CSS_RADIUS,
   DEFAULT_BRUSH,
+  canUndo,
+  emptyHistory,
+  record,
+  rewind,
   type Op,
+  type Ops,
 } from "./annotate";
 
 const M = (id: string): Op => ({ kind: "mosaic", id, points: [{ x: 1, y: 1 }], radius: 3 });
@@ -116,6 +121,59 @@ describe("brushRadius", () => {
 
   it("再小也至少 1 像素——半径 0 会画出什么都没有的笔迹", () => {
     expect(brushRadius("small", 0.01)).toBe(1);
+  });
+});
+
+describe("撤销快照栈", () => {
+  it("新建的历史不能撤销", () => {
+    expect(canUndo(emptyHistory())).toBe(false);
+    expect(rewind(emptyHistory())).toBeNull();
+  });
+
+  it("撤销一次追加，回到追加之前", () => {
+    const a: Ops = { list: [M("op-1")] };
+    const h = record(emptyHistory(), a);
+    const back = rewind(h);
+    expect(back!.ops.list.map((o) => o.id)).toEqual(["op-1"]);
+    expect(canUndo(back!.history)).toBe(false);
+  });
+
+  it("撤销一次「修改」恢复的是旧内容，而不是把那条整个删掉——这正是 slice(0,-1) 做不到的", () => {
+    const before: Ops = { list: [T("op-1", "旧")] };
+    const after = replaceOp(before, "op-1", T("op-1", "新"));
+    const h = record(emptyHistory(), before);
+
+    const back = rewind(h)!;
+
+    expect(back.ops.list).toHaveLength(1);
+    expect((back.ops.list[0] as { text: string }).text).toBe("旧");
+    // 对照:旧实现会得到一个空列表
+    expect(after.list).toHaveLength(1);
+  });
+
+  it("撤销一次「删除」把那条放回来", () => {
+    const before: Ops = { list: [M("op-1"), T("op-2", "x")] };
+    const h = record(emptyHistory(), before);
+    expect(rewind(h)!.ops.list.map((o) => o.id)).toEqual(["op-1", "op-2"]);
+  });
+
+  it("连续撤销按后进先出逐步回退", () => {
+    let h = emptyHistory();
+    const s0: Ops = { list: [] };
+    const s1: Ops = { list: [M("op-1")] };
+    h = record(h, s0);
+    h = record(h, s1);
+    const first = rewind(h)!;
+    expect(first.ops.list.map((o) => o.id)).toEqual(["op-1"]);
+    const second = rewind(first.history)!;
+    expect(second.ops.list).toEqual([]);
+    expect(canUndo(second.history)).toBe(false);
+  });
+
+  it("record 不修改传入的历史", () => {
+    const h = emptyHistory();
+    record(h, { list: [M("op-1")] });
+    expect(canUndo(h)).toBe(false);
   });
 });
 

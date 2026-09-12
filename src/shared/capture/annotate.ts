@@ -72,6 +72,37 @@ export function hasMosaic(list: Op[]): boolean {
   return list.some((o) => o.kind === "mosaic");
 }
 
+/**
+ * 撤销历史。存的是每次变更**之前**的整份操作列表快照。
+ *
+ * 不用「弹掉最后一个 op」:文字可以二次编辑,变更不再只有追加,还有修改和删除。
+ * 对「刚把一段文字改错了」,弹掉最后一项会把那条文字整个删掉,而正确结果是恢复
+ * 上一版内容。op 对象都很小,快照的内存代价可以忽略。
+ */
+export interface History {
+  past: Ops[];
+}
+
+export function emptyHistory(): History {
+  return { past: [] };
+}
+
+export function canUndo(h: History): boolean {
+  return h.past.length > 0;
+}
+
+/** 在变更之前调用,把当前这份存起来。返回新历史,不修改传入的那份。 */
+export function record(h: History, before: Ops): History {
+  return { past: [...h.past, before] };
+}
+
+/** 回退一步。历史为空时返回 null,由调用方当作无操作。 */
+export function rewind(h: History): { history: History; ops: Ops } | null {
+  const ops = h.past[h.past.length - 1];
+  if (!ops) return null;
+  return { history: { past: h.past.slice(0, -1) }, ops };
+}
+
 export type BrushSize = "small" | "medium" | "large";
 
 /** 笔刷半径(CSS 像素)。三档差距要拉开——遮一行小字和遮半张图不是一个量级。 */

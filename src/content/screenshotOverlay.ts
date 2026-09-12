@@ -4,13 +4,18 @@ import {
   brushRadius,
   DEFAULT_BRUSH,
   effectiveList,
+  emptyHistory,
   emptyOps,
   hasMosaic,
   nextOpId,
   pushOp,
+  record,
+  rewind,
+  canUndo,
   toBitmapPt,
   type BrushSize,
   type Draft,
+  type History,
   type MosaicOp,
   type Ops,
   type Pt,
@@ -256,16 +261,24 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     }
   }
 
+  /** 所有对 ops 的变更都必须走这里,否则那一步就撤销不回来。 */
+  function mutate(next: Ops): void {
+    history = record(history, ops);
+    ops = next;
+    afterOpsChanged();
+  }
+
   /** 操作列表变了就同步撤销按钮——按钮亮着却没东西可撤,比禁用更让人困惑。 */
   function afterOpsChanged(): void {
-    toolbar.setUndoEnabled(ops.list.length > 0);
+    toolbar.setUndoEnabled(canUndo(history));
     refreshPreview();
   }
 
   function doUndo(): void {
-    if (ops.list.length === 0) return; // 空列表上撤销是无操作,不该有任何副作用
-    // 过渡写法:按下标砍掉最后一项。Task 3 会把它整个换成快照栈。
-    ops = { list: ops.list.slice(0, -1) };
+    const back = rewind(history);
+    if (!back) return; // 空历史上撤销是无操作,不该有任何副作用
+    history = back.history;
+    ops = back.ops;
     afterOpsChanged();
   }
 
@@ -331,6 +344,7 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   let pending: Rect | null = null;
   // 标注操作列表。Task 4 起才会被写入,现在恒为空——但保存路径已经把它传下去了。
   let ops: Ops = emptyOps();
+  let history: History = emptyHistory();
 
   /** 把按钮条贴到选区右下角外侧;下方放不下就收进选区内部,免得按钮跑到视口外点不到。 */
   function placeActions(r: Rect): void {
@@ -426,8 +440,7 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
           points: painting.map((p) => toBitmapPt(p, scale)),
           radius: brushRadius(brush, scale),
         };
-        ops = pushOp(ops, s);
-        afterOpsChanged();
+        mutate(pushOp(ops, s));
       }
       painting = null;
       return;
