@@ -1,45 +1,74 @@
 import { describe, expect, it } from "vitest";
 import {
   emptyOps,
-  isEmpty,
-  pushStroke,
-  undo,
+  pushOp,
+  replaceOp,
+  effectiveList,
+  hasMosaic,
+  nextOpId,
   bitmapScale,
   toBitmapPt,
   brushRadius,
   BRUSH_CSS_RADIUS,
   DEFAULT_BRUSH,
-  type Stroke,
+  type Op,
 } from "./annotate";
 
-const stroke = (n: number): Stroke => ({ points: [{ x: n, y: n }], radius: 10 });
+const M = (id: string): Op => ({ kind: "mosaic", id, points: [{ x: 1, y: 1 }], radius: 3 });
+const R = (id: string): Op => ({ kind: "rect", id, r: { x: 0, y: 0, w: 10, h: 10 }, color: "red", width: 2 });
+const T = (id: string, text: string): Op => ({ kind: "text", id, at: { x: 5, y: 5 }, text, color: "blue", fontPx: 20 });
 
 describe("操作列表", () => {
   it("新建的操作列表是空的", () => {
-    expect(isEmpty(emptyOps())).toBe(true);
-    expect(emptyOps().mosaics).toEqual([]);
+    expect(emptyOps().list).toEqual([]);
   });
 
-  it("追加笔迹后不再为空，且按追加顺序排列", () => {
-    const ops = pushStroke(pushStroke(emptyOps(), stroke(1)), stroke(2));
-    expect(isEmpty(ops)).toBe(false);
-    expect(ops.mosaics.map((s) => s.points[0].x)).toEqual([1, 2]);
+  it("pushOp 按顺序追加，且不修改原对象——渲染靠重放，就地改会让快照失去参照", () => {
+    const a = emptyOps();
+    const b = pushOp(a, M("op-1"));
+    const c = pushOp(b, R("op-2"));
+    expect(a.list).toEqual([]);
+    expect(c.list.map((o) => o.id)).toEqual(["op-1", "op-2"]);
   });
 
-  it("追加不修改原对象——渲染要靠重放，就地改会让撤销失去参照", () => {
-    const before = emptyOps();
-    pushStroke(before, stroke(1));
-    expect(before.mosaics).toEqual([]);
+  it("replaceOp 就地替换，位置不变——改完的文字必须留在原来的层叠位置", () => {
+    const ops = { list: [M("op-1"), T("op-2", "旧"), R("op-3")] };
+    const next = replaceOp(ops, "op-2", T("op-2", "新"));
+    expect(next.list.map((o) => o.id)).toEqual(["op-1", "op-2", "op-3"]);
+    expect((next.list[1] as { text: string }).text).toBe("新");
   });
 
-  it("撤销只去掉最后一条，更早的原样保留", () => {
-    const ops = pushStroke(pushStroke(pushStroke(emptyOps(), stroke(1)), stroke(2)), stroke(3));
-    expect(undo(ops).mosaics.map((s) => s.points[0].x)).toEqual([1, 2]);
+  it("replaceOp 传 null 表示删除该项", () => {
+    const ops = { list: [M("op-1"), T("op-2", "x")] };
+    expect(replaceOp(ops, "op-2", null).list.map((o) => o.id)).toEqual(["op-1"]);
   });
 
-  it("空列表上撤销不报错，仍是空", () => {
-    expect(() => undo(emptyOps())).not.toThrow();
-    expect(isEmpty(undo(emptyOps()))).toBe(true);
+  it("effectiveList 没有草稿时原样返回", () => {
+    const ops = { list: [M("op-1")] };
+    expect(effectiveList(ops)).toEqual(ops.list);
+  });
+
+  it("effectiveList 的 replacesId 为 null 时把草稿追加在末尾", () => {
+    const ops = { list: [M("op-1")] };
+    const got = effectiveList(ops, { op: R("op-9"), replacesId: null });
+    expect(got.map((o) => o.id)).toEqual(["op-1", "op-9"]);
+  });
+
+  it("effectiveList 的 replacesId 命中时就地替换，不移到末尾——否则编辑中的文字会跳到最上层", () => {
+    const ops = { list: [T("op-1", "甲"), R("op-2")] };
+    const got = effectiveList(ops, { op: T("op-1", "乙"), replacesId: "op-1" });
+    expect(got.map((o) => o.id)).toEqual(["op-1", "op-2"]);
+    expect((got[0] as { text: string }).text).toBe("乙");
+  });
+
+  it("hasMosaic 只认 mosaic 类型——三个箭头不该触发像素化", () => {
+    expect(hasMosaic([R("op-1"), T("op-2", "x")])).toBe(false);
+    expect(hasMosaic([R("op-1"), M("op-2")])).toBe(true);
+    expect(hasMosaic([])).toBe(false);
+  });
+
+  it("nextOpId 连续调用不重复", () => {
+    expect(nextOpId()).not.toBe(nextOpId());
   });
 });
 

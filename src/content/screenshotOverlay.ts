@@ -3,15 +3,17 @@ import {
   bitmapScale,
   brushRadius,
   DEFAULT_BRUSH,
+  effectiveList,
   emptyOps,
-  isEmpty,
-  pushStroke,
+  hasMosaic,
+  nextOpId,
+  pushOp,
   toBitmapPt,
-  undo as undoOps,
   type BrushSize,
+  type Draft,
+  type MosaicOp,
   type Ops,
   type Pt,
-  type Stroke,
 } from "../shared/capture/annotate";
 import { pixelateCrop, renderAnnotated } from "../shared/capture/render";
 import { SHOW_OVERLAY, type ShowOverlayMsg } from "../shared/capture/messages";
@@ -204,10 +206,10 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
    * 保存时还是会连它一起存下来。预览要是被工具切换隐藏,用户就会在看不见马赛克
    * 的情况下把带马赛克的图存下去——这正是这套架构要杜绝的「所见非所得」。
    *
-   * partial:正在拖拽、还没落进 ops 里的那一笔(见下面 mousemove 的实时重画),
-   * 只用于渲染,不写回 ops——手一松才由 endDrag 正式 pushStroke。
+   * draft:正在拖拽、还没落进 ops 里的那一笔(见下面 mousemove 的实时重画),
+   * 只用于渲染,不写回 ops——手一松才由 endDrag 正式 pushOp。
    */
-  function refreshPreview(partial?: Stroke): void {
+  function refreshPreview(draft?: Draft): void {
     const bmp = live?.bmp;
     if (!pending || !bmp) {
       hidePreview();
@@ -232,12 +234,14 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     preview.style.width = `${pending.w}px`;
     preview.style.height = `${pending.h}px`;
     try {
+      const list = effectiveList(ops, draft);
       const key = `${b.x},${b.y},${b.w},${b.h}`;
-      if (pixCache?.key !== key) pixCache = { key, canvas: pixelateCrop(bmp, b) };
+      if (hasMosaic(list)) {
+        if (pixCache?.key !== key) pixCache = { key, canvas: pixelateCrop(bmp, b) };
+      }
       // 与保存路径同一个 renderAnnotated——预览就是最终图像本身,只是缩小显示,
       // 不是另起一套近似绘制,这样用户看到的和存下来的才不会走样。
-      const renderOps = partial ? pushStroke(ops, partial) : ops;
-      const out = renderAnnotated(bmp, b, renderOps, pixCache.canvas);
+      const out = renderAnnotated(bmp, b, ops, pixCache?.canvas ?? document.createElement("canvas"), draft);
       const ctx = preview.getContext("2d");
       if (!ctx) throw new Error("2d context unavailable");
       preview.width = out.width;
@@ -254,13 +258,14 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
 
   /** 操作列表变了就同步撤销按钮——按钮亮着却没东西可撤,比禁用更让人困惑。 */
   function afterOpsChanged(): void {
-    toolbar.setUndoEnabled(!isEmpty(ops));
+    toolbar.setUndoEnabled(ops.list.length > 0);
     refreshPreview();
   }
 
   function doUndo(): void {
-    if (isEmpty(ops)) return; // 空列表上撤销是无操作,不该有任何副作用
-    ops = undoOps(ops);
+    if (ops.list.length === 0) return; // 空列表上撤销是无操作,不该有任何副作用
+    // 过渡写法:按下标砍掉最后一项。Task 3 会把它整个换成快照栈。
+    ops = { list: ops.list.slice(0, -1) };
     afterOpsChanged();
   }
 
@@ -415,11 +420,13 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
       if (bmp) {
         // 收集的是 CSS 坐标,存进操作列表前立刻换算成位图坐标——之后渲染就不必再考虑缩放。
         const scale = bitmapScale(bmp.width, window.innerWidth);
-        const s: Stroke = {
+        const s: MosaicOp = {
+          kind: "mosaic",
+          id: nextOpId(),
           points: painting.map((p) => toBitmapPt(p, scale)),
           radius: brushRadius(brush, scale),
         };
-        ops = pushStroke(ops, s);
+        ops = pushOp(ops, s);
         afterOpsChanged();
       }
       painting = null;
@@ -477,11 +484,13 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
       // 就是要保存的东西」这条约定在拖拽过程中会被打破。换算方式和 endDrag 落定
       // 时完全一致,只是这里的结果只用于渲染,不写回 ops。
       const scale = bitmapScale(bmp.width, window.innerWidth);
-      const s: Stroke = {
+      const s: MosaicOp = {
+        kind: "mosaic",
+        id: nextOpId(),
         points: painting.map((p) => toBitmapPt(p, scale)),
         radius: brushRadius(brush, scale),
       };
-      refreshPreview(s);
+      refreshPreview({ op: s, replacesId: null });
     });
   }
 
@@ -615,11 +624,11 @@ export async function copyRegion(bmp: ImageBitmap, r: Rect, ops: Ops): Promise<v
     const scale = bitmapScale(bmp.width, window.innerWidth);
     const b = toBitmapRect(r, scale, bmp.width, bmp.height);
     if (b.w === 0 || b.h === 0) return; // 选区完全落在图外,当取消,不提示
-    // 没有笔迹是最常见的情形(框完选区直接保存,没碰马赛克工具)。renderAnnotated
-    // 在 ops 为空时根本不看 pix 参数就提前返回,但 pixelateCrop 本身要分配两张
+    // 没有马赛克是最常见的情形(框完选区直接保存,没碰马赛克工具)。renderAnnotated
+    // 在列表里没有 mosaic 时根本不看 pix 参数,但 pixelateCrop 本身要分配两张
     // 裁剪尺寸的画布并做一次缩小再放大——4K 截图上这是几十 MB 的白费功夫。
-    // 只在真有笔迹时才算它,空画布当占位符,反正用不上。
-    const pix = isEmpty(ops) ? document.createElement("canvas") : pixelateCrop(bmp, b);
+    // 只在真有马赛克时才算它,空画布当占位符,反正用不上。
+    const pix = hasMosaic(ops.list) ? pixelateCrop(bmp, b) : document.createElement("canvas");
     const canvas = renderAnnotated(bmp, b, ops, pix);
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
     if (!blob) throw new Error("toBlob returned null");

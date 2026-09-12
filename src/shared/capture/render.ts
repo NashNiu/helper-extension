@@ -1,5 +1,5 @@
 import type { Rect } from "./rect";
-import type { Ops } from "./annotate";
+import { effectiveList, type Draft, type MosaicOp, type Ops } from "./annotate";
 
 function make2d(w: number, h: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
   const canvas = document.createElement("canvas");
@@ -37,48 +37,61 @@ export function pixelateCrop(bmp: ImageBitmap, crop: Rect): HTMLCanvasElement {
 }
 
 /**
- * 底图裁剪 + 按笔迹蒙版贴上马赛克。
+ * 底图裁剪 + 标注。
  *
  * **预览与最终输出必须都调用这一个函数。** 另做一套「近似的」预览画法,是这类工具
  * 最常见的缺陷来源——用户看到的和存下来的对不上。
  *
- * pix 由调用方传入(见 pixelateCrop 的缓存说明)。
+ * 马赛克恒在最底层:它遮的是原图像素,让它盖住一支箭头没有意义——那支箭头本来
+ * 就不在原图里。所以先一次性合成全部马赛克,再按 list 顺序画其余 op。
+ *
+ * pix 由调用方传入(见 pixelateCrop 的缓存说明)。没有马赛克时它不会被读取,
+ * 调用方可以传一张空画布。
  */
-export function renderAnnotated(bmp: ImageBitmap, crop: Rect, ops: Ops, pix: HTMLCanvasElement): HTMLCanvasElement {
+export function renderAnnotated(
+  bmp: ImageBitmap,
+  crop: Rect,
+  ops: Ops,
+  pix: HTMLCanvasElement,
+  draft?: Draft,
+): HTMLCanvasElement {
+  const list = effectiveList(ops, draft);
   const out = make2d(crop.w, crop.h);
   out.ctx.drawImage(bmp, crop.x, crop.y, crop.w, crop.h, 0, 0, crop.w, crop.h);
-  if (ops.mosaics.length === 0) return out.canvas;
 
-  // 蒙版:笔迹画成白色圆头粗线。笔迹是位图坐标,画进裁剪局部坐标要减去裁剪原点。
-  const mask = make2d(crop.w, crop.h);
-  mask.ctx.strokeStyle = "#fff";
-  mask.ctx.fillStyle = "#fff";
-  mask.ctx.lineCap = "round";
-  mask.ctx.lineJoin = "round";
-  for (const s of ops.mosaics) {
-    const first = s.points[0];
-    if (!first) continue;
-    mask.ctx.beginPath();
-    if (s.points.length === 1) {
-      // 只点一下没拖:lineTo 画不出任何东西,得用一个圆点代替,否则点击等于白点。
-      mask.ctx.arc(first.x - crop.x, first.y - crop.y, s.radius, 0, Math.PI * 2);
-      mask.ctx.fill();
-      continue;
+  const mosaics = list.filter((o): o is MosaicOp => o.kind === "mosaic");
+  if (mosaics.length > 0) {
+    // 蒙版:笔迹画成白色圆头粗线。笔迹是位图坐标,画进裁剪局部坐标要减去裁剪原点。
+    const mask = make2d(crop.w, crop.h);
+    mask.ctx.strokeStyle = "#fff";
+    mask.ctx.fillStyle = "#fff";
+    mask.ctx.lineCap = "round";
+    mask.ctx.lineJoin = "round";
+    for (const s of mosaics) {
+      const first = s.points[0];
+      if (!first) continue;
+      mask.ctx.beginPath();
+      if (s.points.length === 1) {
+        // 只点一下没拖:lineTo 画不出任何东西,得用一个圆点代替,否则点击等于白点。
+        mask.ctx.arc(first.x - crop.x, first.y - crop.y, s.radius, 0, Math.PI * 2);
+        mask.ctx.fill();
+        continue;
+      }
+      mask.ctx.lineWidth = s.radius * 2;
+      mask.ctx.moveTo(first.x - crop.x, first.y - crop.y);
+      for (let i = 1; i < s.points.length; i++) {
+        mask.ctx.lineTo(s.points[i].x - crop.x, s.points[i].y - crop.y);
+      }
+      mask.ctx.stroke();
     }
-    mask.ctx.lineWidth = s.radius * 2;
-    mask.ctx.moveTo(first.x - crop.x, first.y - crop.y);
-    for (let i = 1; i < s.points.length; i++) {
-      mask.ctx.lineTo(s.points[i].x - crop.x, s.points[i].y - crop.y);
-    }
-    mask.ctx.stroke();
+    // 只保留笔迹覆盖到的那部分马赛克,再叠回原图。
+    const masked = make2d(crop.w, crop.h);
+    masked.ctx.drawImage(pix, 0, 0);
+    masked.ctx.globalCompositeOperation = "destination-in";
+    masked.ctx.drawImage(mask.canvas, 0, 0);
+    out.ctx.drawImage(masked.canvas, 0, 0);
   }
 
-  // 只保留笔迹覆盖到的那部分马赛克,再叠回原图。
-  const masked = make2d(crop.w, crop.h);
-  masked.ctx.drawImage(pix, 0, 0);
-  masked.ctx.globalCompositeOperation = "destination-in";
-  masked.ctx.drawImage(mask.canvas, 0, 0);
-
-  out.ctx.drawImage(masked.canvas, 0, 0);
+  // rect / arrow / text 的绘制分支由 Task 5、6、9 依次加在这里。
   return out.canvas;
 }

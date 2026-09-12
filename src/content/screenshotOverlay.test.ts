@@ -11,7 +11,7 @@ vi.mock("../shared/locale", () => ({
 }));
 
 import { showOverlay, hideOverlay, showToast, copyRegion, OVERLAY_ID, TOAST_ID } from "./screenshotOverlay";
-import { emptyOps, type Ops } from "../shared/capture/annotate";
+import { emptyOps, type MosaicOp, type Ops } from "../shared/capture/annotate";
 import type { Rect } from "../shared/capture/rect";
 import { translate } from "../i18n/core";
 
@@ -145,7 +145,7 @@ describe("screenshotOverlay", () => {
     // commit() 里的 bmpReady.then(...) 即使 bmpReady 早已 resolve,回调也总是排到
     // 微任务队列里,不会跟 clickSave() 同步执行——断言前得再放一轮微任务过去。
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { mosaics: [] });
+    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { list: [] });
   });
 
   it("保存时把解码后的位图和操作列表交给 copy——不再传 dataUrl", async () => {
@@ -155,7 +155,7 @@ describe("screenshotOverlay", () => {
     drag([100, 200], [50, 80]);
     clickSave();
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
-    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { mosaics: [] });
+    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { list: [] });
   });
 
   it("覆盖层拆除时释放位图——位图现在归覆盖层持有，不释放就是泄漏", async () => {
@@ -185,7 +185,7 @@ describe("screenshotOverlay", () => {
     clickSave();
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
     expect(copy).toHaveBeenCalledTimes(1);
-    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 10, y: 10, w: 20, h: 30 }, { mosaics: [] });
+    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 10, y: 10, w: 20, h: 30 }, { list: [] });
   });
 
   it("重新开始拖拽时按钮先收起来，免得它悬在半空挡着新选区", async () => {
@@ -211,7 +211,7 @@ describe("screenshotOverlay", () => {
       .dispatchEvent(new MouseEvent("mousedown", { clientX: 105, clientY: 205, button: 0, bubbles: true }));
     clickSave();
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
-    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { mosaics: [] });
+    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { list: [] });
   });
 
   it("待确认时按 Enter 等同于点保存", async () => {
@@ -221,7 +221,7 @@ describe("screenshotOverlay", () => {
     drag([100, 200], [50, 80]);
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
-    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { mosaics: [] });
+    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { list: [] });
   });
 
   it("还没框选时按 Enter 什么也不做", () => {
@@ -392,7 +392,7 @@ describe("screenshotOverlay", () => {
     clickSave();
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
     expect(copy).toHaveBeenCalledTimes(1);
-    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { mosaics: [] });
+    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { list: [] });
   });
 
   it("保存进行中被拆除覆盖层不能提前关闭位图——位图归 commit 所有，copy 结束才关且只关一次", async () => {
@@ -414,7 +414,7 @@ describe("screenshotOverlay", () => {
     drag([100, 200], [50, 80]);
     clickSave();
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 把位图交给 copy
-    expect(copy).toHaveBeenCalledWith(localBmp, { x: 50, y: 80, w: 50, h: 120 }, { mosaics: [] });
+    expect(copy).toHaveBeenCalledWith(localBmp, { x: 50, y: 80, w: 50, h: 120 }, { list: [] });
 
     // copy 还没 settle 时拆除覆盖层(用户按 Esc,或立刻又触发一次截图):这不该
     // 关掉 copy 正在用的这份位图,否则它内部的 renderAnnotated 会因为位图已经
@@ -443,7 +443,7 @@ describe("screenshotOverlay", () => {
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
     const [, rect, ops] = copy.mock.calls[0];
     expect(rect).toEqual({ x: 50, y: 80, w: 50, h: 120 }); // 选区没被改
-    expect(ops.mosaics).toHaveLength(1); // 多了一条笔迹
+    expect(ops.list).toHaveLength(1); // 多了一条操作
   });
 
   it("涂抹的笔迹存的是位图坐标,不是屏幕坐标", async () => {
@@ -457,7 +457,7 @@ describe("screenshotOverlay", () => {
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
     const ops = copy.mock.calls[0][2];
     // FAKE_BMP 宽 2000,happy-dom 视口宽 1024 → scale 约 1.95,位图坐标必然大于屏幕坐标
-    expect(ops.mosaics[0].points[0].x).toBeGreaterThan(60);
+    expect((ops.list[0] as MosaicOp).points[0].x).toBeGreaterThan(60);
   });
 
   it("切回选区工具后拖动又能重新框选", async () => {
@@ -484,7 +484,7 @@ describe("screenshotOverlay", () => {
     drag([10, 10], [40, 50]);
     clickSave();
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
-    expect(copy.mock.calls[0][2].mosaics).toHaveLength(1);
+    expect(copy.mock.calls[0][2].list).toHaveLength(1);
   });
 
   it("框出选区后（不必等切到马赛克工具）就挂上按位图分辨率开的预览画布", async () => {
@@ -535,7 +535,7 @@ describe("screenshotOverlay", () => {
     // 同上面其它保存路径的用例:commit() 里的 bmpReady.then(...) 总是排到微任务
     // 队列里,不会跟 clickSave() 同步执行——断言前得再放一轮微任务过去。
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(copy.mock.calls[0][2].mosaics).toHaveLength(1);
+    expect(copy.mock.calls[0][2].list).toHaveLength(1);
   });
 
   it("Ctrl+Z 与点撤销等价", async () => {
@@ -547,7 +547,7 @@ describe("screenshotOverlay", () => {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Z", ctrlKey: true, shiftKey: true, bubbles: true }));
     clickSave();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(copy.mock.calls[0][2].mosaics).toHaveLength(0);
+    expect(copy.mock.calls[0][2].list).toHaveLength(0);
   });
 
   it("撤销按钮在没有笔迹时禁用，涂一笔后可用", async () => {
@@ -563,9 +563,10 @@ describe("screenshotOverlay", () => {
   });
 
   it("撤销到空之后再撤销、再按 Ctrl+Z：不抛错，覆盖层不消失", async () => {
-    // 注意这个名字刻意没提 isEmpty 守卫:undo() 对空数组 slice(0,-1) 本来就还是
-    // 空数组，就算 doUndo() 里去掉 isEmpty 判断，这里断言的「不抛错」照样成立——
-    // 这个用例锁定的只是「重复撤销不炸」这个可观察行为，不是守卫本身的必要性。
+    // 注意这个名字刻意没提「空列表」守卫:slice(0,-1) 在空数组上本来就还是
+    // 空数组，就算 doUndo() 里去掉 ops.list.length === 0 的判断，这里断言的
+    // 「不抛错」照样成立——这个用例锁定的只是「重复撤销不炸」这个可观察行为，
+    // 不是守卫本身的必要性。
     const copy = vi.fn(async () => {});
     await paintOne(copy);
     clickUndo();
