@@ -118,4 +118,41 @@ describe("文字编辑器", () => {
     expect((ed.draft()!.op as TextOp).at).toEqual({ x: 99, y: 88 });
     expect(cb.onChange).toHaveBeenCalled();
   });
+
+  describe("失焦即定稿", () => {
+    // 真实浏览器里,点工具栏按钮、点画布别处都会把焦点从这个 input 移走,
+    // 触发一次原生 blur——这是浏览器的保证,不用在测试里造。这里只测「我们的
+    // 处理器对 blur 的反应」:直接在 input 上派发 blur 事件,断言草稿被提交。
+    it("编辑中派发 blur → onCommit 被调用一次，内容正确，isEditing() 变 false", () => {
+      const { root, cb } = setup();
+      const ed = createTextEditor(root, cb, (p) => p);
+      ed.begin(OP, null);
+      ed.el.value = "失焦定稿";
+      ed.el.dispatchEvent(new Event("input"));
+      ed.el.dispatchEvent(new Event("blur"));
+      expect(cb.onCommit).toHaveBeenCalledTimes(1);
+      expect((cb.onCommit.mock.calls[0][0].op as TextOp).text).toBe("失焦定稿");
+      expect(ed.isEditing()).toBe(false);
+    });
+
+    it("commit() 自身调用 el.blur() 触发的那次 blur 是无操作，不会让 onCommit 被调两次", () => {
+      const { root, cb } = setup();
+      const ed = createTextEditor(root, cb, (p) => p);
+      ed.begin(OP, null);
+      ed.el.value = "只提交一次";
+      ed.el.dispatchEvent(new Event("input"));
+      // commit() 内部会调 el.blur(),happy-dom 里这会同步派发一次真正的 blur 事件——
+      // 此时 current 已经在 commit() 里被置空,blur 监听器再次调用 commit() 时
+      // 必须短路成无操作,而不是把同一条草稿又回调一遍。
+      ed.commit();
+      expect(cb.onCommit).toHaveBeenCalledTimes(1);
+    });
+
+    it("没在编辑时派发 blur 是无操作", () => {
+      const { root, cb } = setup();
+      const ed = createTextEditor(root, cb, (p) => p);
+      ed.el.dispatchEvent(new Event("blur"));
+      expect(cb.onCommit).not.toHaveBeenCalled();
+    });
+  });
 });

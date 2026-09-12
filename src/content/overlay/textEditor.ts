@@ -73,6 +73,14 @@ export function createTextEditor(
     composing = false;
     sync();
   });
+  // 失焦即定稿:规格要求「点别处/切工具/点保存」都要先定稿再执行原动作,而这三个
+  // 场景的共同点是焦点会被移出这个 input——工具栏按钮、画布、保存按钮的 mousedown
+  // 默认行为都会抢走焦点。与其在覆盖层里给每个回调分别补一句 editor.commit(),
+  // 不如在这里一次性接住 blur,天然覆盖全部三条路径,也不会漏掉将来新增的按钮。
+  // commit() 自己也会调 el.blur() 来清掉焦点,那会同步再派发一次 blur——此时
+  // current 已经被 commit() 置空,下面这次重入调用会在 commit() 的头一行短路,
+  // 不会二次回调 onCommit。
+  el.addEventListener("blur", () => commit());
   el.addEventListener("keydown", (e) => {
     if (composing) return;
     if (e.key === "Enter" || e.key === "Escape") {
