@@ -8,6 +8,7 @@ import {
   emptyHistory,
   emptyOps,
   hasMosaic,
+  lineWidth,
   nextOpId,
   pushOp,
   record,
@@ -18,6 +19,7 @@ import {
   type Draft,
   type History,
   type MosaicOp,
+  type Op,
   type OpColor,
   type Ops,
   type Pt,
@@ -165,12 +167,8 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
 
   let tool: Tool = "select";
   let brush: BrushSize = DEFAULT_BRUSH;
-  // 当前选中的颜色。矩形/箭头/文字真正读它来构造 RectOp/ArrowOp/TextOp 是下一个
-  // 任务的活,这里只接好回调与状态。noUnusedLocals 只认"有没有被读过",不认
-  // "将来会被读"——下面这行 void 是唯一的读取点,等 Task 5 接上真正的消费者
-  // (构造带 color 字段的 op)之后就可以删掉它。
+  // 当前选中的颜色。矩形/箭头/文字构造 RectOp/ArrowOp/TextOp 时读取它。
   let color: OpColor = DEFAULT_COLOR;
-  void color;
 
   const toolbar = createToolbar({
     onTool: (t) => {
@@ -352,6 +350,8 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   let start: { x: number; y: number } | null = null;
   // 正在涂抹的这一笔。与 start 分开:选区拖动只需要起点,涂抹要留住整条轨迹。
   let painting: Pt[] | null = null;
+  // 正在拖的矩形/箭头的起点(CSS 坐标)。与 start 分开:start 是取景,这个是画标注。
+  let shapeStart: { x: number; y: number } | null = null;
   // 已框好、等用户点保存的选区。null 表示还没框(或刚被取消/重新开拖)。
   let pending: Rect | null = null;
   // 标注操作列表。Task 4 起才会被写入,现在恒为空——但保存路径已经把它传下去了。
@@ -436,6 +436,34 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     size.textContent = `${r.w} × ${r.h}`;
   }
 
+  /**
+   * 把一次形状拖拽转成 op。拿不到位图(还没解码完)或者太小就返回 null,由调用方丢掉。
+   *
+   * 坐标在这里就换算成位图坐标——与 endDrag 落定时完全一致,渲染阶段不再考虑缩放。
+   */
+  function shapeOpFrom(origin: { x: number; y: number }, toX: number, toY: number): Op | null {
+    const bmp = live?.bmp;
+    if (!bmp) return null;
+    const scale = bitmapScale(bmp.width, window.innerWidth);
+    if (tool === "rect") {
+      const css = normalizeRect(origin.x, origin.y, toX, toY);
+      if (isTooSmall(css)) return null; // 误点不该留下一个看不见的框
+      return {
+        kind: "rect",
+        id: nextOpId(),
+        r: {
+          x: Math.round(css.x * scale),
+          y: Math.round(css.y * scale),
+          w: Math.round(css.w * scale),
+          h: Math.round(css.h * scale),
+        },
+        color,
+        width: lineWidth(brush, scale),
+      };
+    }
+    return null;
+  }
+
   // 结束拖拽的公共逻辑:既被 surface 自身的 mouseup 调用,也被下面 window 级的
   // 兜底监听调用。「先判空、再置空 start、才使用它」保证两边都收到同一次松开时
   // 不会被处理两次——第二次进来 start 已经是 null,直接短路。
@@ -455,6 +483,13 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
         mutate(pushOp(ops, s));
       }
       painting = null;
+      return;
+    }
+    if (shapeStart) {
+      const op = shapeOpFrom(shapeStart, clientX, clientY);
+      shapeStart = null;
+      if (op) mutate(pushOp(ops, op));
+      else refreshPreview(); // 丢掉这一笔,把预览恢复成没有草稿的样子
       return;
     }
     if (!start) return;
@@ -481,6 +516,11 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     if (tool === "mosaic" && pending) {
       // 马赛克工具下拖动是涂抹,不动选区。没有选区时不该能涂——涂到哪儿都不会被保存。
       painting = [{ x: e.clientX, y: e.clientY }];
+      e.preventDefault();
+      return;
+    }
+    if ((tool === "rect" || tool === "arrow") && pending) {
+      shapeStart = { x: e.clientX, y: e.clientY };
       e.preventDefault();
       return;
     }
@@ -523,6 +563,13 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     if (painting) {
       painting.push({ x: e.clientX, y: e.clientY });
       schedulePaintPreview();
+      return;
+    }
+    if (shapeStart) {
+      const op = shapeOpFrom(shapeStart, e.clientX, e.clientY);
+      // 太小还画不出东西时传 undefined,预览就是干净的底图——比画一个瞬间闪现的
+      // 零尺寸框好。
+      refreshPreview(op ? { op, replacesId: null } : undefined);
       return;
     }
     if (!start) return;

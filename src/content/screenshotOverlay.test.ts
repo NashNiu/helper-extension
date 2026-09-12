@@ -68,6 +68,20 @@ function clickUndo() {
     .dispatchEvent(new MouseEvent("click", { bubbles: true }));
 }
 
+/** 先框好选区,切到指定工具,再在选区内拖一次,最后点保存。返回交给 copy 的操作列表。 */
+async function drawThenSave(tool: string, from: [number, number], to: [number, number]): Promise<Ops> {
+  const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+  showOverlay(DATA_URL, copy);
+  await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码——后面的形状拖拽要用到位图
+  drag([10, 10], [400, 300]);
+  (host()!.shadowRoot!.querySelector(`[data-tool="${tool}"]`) as HTMLButtonElement).click();
+  drag(from, to);
+  (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+  await Promise.resolve();
+  await Promise.resolve();
+  return copy.mock.calls[0][2] as Ops;
+}
+
 async function paintOne(copy: ReturnType<typeof vi.fn>) {
   showOverlay(DATA_URL, copy);
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -573,6 +587,55 @@ describe("screenshotOverlay", () => {
     expect(() => clickUndo()).not.toThrow();
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
     expect(host()).not.toBeNull();
+  });
+});
+
+describe("矩形框工具", () => {
+  it("拖一次生成一个 rect op，带当前颜色与线宽", async () => {
+    const ops = await drawThenSave("rect", [50, 50], [150, 120]);
+    const op = ops.list.find((o) => o.kind === "rect");
+    expect(op).toBeDefined();
+    expect((op as { color: string }).color).toBe("red");
+    expect((op as { width: number }).width).toBeGreaterThan(0);
+  });
+
+  it("矩形坐标是位图坐标，不是 CSS 坐标——底图宽 2000、视口宽 1024 时要放大", async () => {
+    const ops = await drawThenSave("rect", [50, 50], [150, 120]);
+    const op = ops.list.find((o) => o.kind === "rect") as { r: Rect };
+    // FAKE_BMP.width = 2000,happy-dom 的 window.innerWidth = 1024,scale ≈ 1.95
+    expect(op.r.x).toBeGreaterThan(50);
+  });
+
+  it("点一下不拖不生成矩形——误点不该留下一个看不见的框", async () => {
+    const ops = await drawThenSave("rect", [50, 50], [52, 51]);
+    expect(ops.list.some((o) => o.kind === "rect")).toBe(false);
+  });
+
+  it("矩形工具下拖拽不重新取景——要改取景得先切回选区工具", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码——后面的形状拖拽要用到位图
+    drag([10, 10], [400, 300]);
+    (host()!.shadowRoot!.querySelector('[data-tool="rect"]') as HTMLButtonElement).click();
+    drag([50, 50], [150, 120]);
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const r = copy.mock.calls[0][1] as Rect;
+    expect(r).toEqual({ x: 10, y: 10, w: 390, h: 290 });
+  });
+
+  it("画完矩形后撤销按钮可用，撤销后列表里没有矩形了", async () => {
+    const copy = vi.fn(async () => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码——形状拖拽要用到位图
+    drag([10, 10], [400, 300]);
+    (host()!.shadowRoot!.querySelector('[data-tool="rect"]') as HTMLButtonElement).click();
+    drag([50, 50], [150, 120]);
+    const undoBtn = host()!.shadowRoot!.querySelector("[data-undo]") as HTMLButtonElement;
+    expect(undoBtn.disabled).toBe(false);
+    undoBtn.click();
+    expect(undoBtn.disabled).toBe(true);
   });
 });
 

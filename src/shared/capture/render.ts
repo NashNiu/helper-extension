@@ -1,5 +1,5 @@
 import type { Rect } from "./rect";
-import { effectiveList, type Draft, type MosaicOp, type Ops } from "./annotate";
+import { effectiveList, OP_COLORS, type Draft, type MosaicOp, type Ops, type RectOp } from "./annotate";
 
 function make2d(w: number, h: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
   const canvas = document.createElement("canvas");
@@ -34,6 +34,16 @@ export function pixelateCrop(bmp: ImageBitmap, crop: Rect): HTMLCanvasElement {
   out.ctx.imageSmoothingEnabled = false;
   out.ctx.drawImage(small.canvas, 0, 0, sw, sh, 0, 0, crop.w, crop.h);
   return out.canvas;
+}
+
+/** 空心矩形。坐标是位图坐标,画进裁剪局部坐标要减去裁剪原点。 */
+function drawRect(ctx: CanvasRenderingContext2D, op: RectOp, crop: Rect): void {
+  ctx.save();
+  ctx.strokeStyle = OP_COLORS[op.color];
+  ctx.lineWidth = op.width;
+  ctx.lineJoin = "miter";
+  ctx.strokeRect(op.r.x - crop.x, op.r.y - crop.y, op.r.w, op.r.h);
+  ctx.restore();
 }
 
 /**
@@ -92,6 +102,9 @@ export function renderAnnotated(
     out.ctx.drawImage(masked.canvas, 0, 0);
   }
 
-  // rect / arrow / text 的绘制分支由 Task 5、6、9 依次加在这里。
+  // rect 的绘制分支;arrow、text 由 Task 6、9 依次加在这里。
+  for (const op of list) {
+    if (op.kind === "rect") drawRect(out.ctx, op, crop);
+  }
   return out.canvas;
 }
