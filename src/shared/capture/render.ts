@@ -1,5 +1,18 @@
 import type { Rect } from "./rect";
-import { arrowHead, effectiveList, OP_COLORS, type ArrowOp, type Draft, type MosaicOp, type Ops, type RectOp } from "./annotate";
+import {
+  arrowHead,
+  effectiveList,
+  fontString,
+  OP_COLORS,
+  type ArrowOp,
+  type Draft,
+  type Measure,
+  type MosaicOp,
+  type Ops,
+  type OpColor,
+  type RectOp,
+  type TextOp,
+} from "./annotate";
 
 function make2d(w: number, h: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
   const canvas = document.createElement("canvas");
@@ -9,6 +22,30 @@ function make2d(w: number, h: number): { canvas: HTMLCanvasElement; ctx: CanvasR
   if (!ctx) throw new Error("2d context unavailable");
   return { canvas, ctx };
 }
+
+/** 文字描边色。四个标注色里只有黄是浅色,配深色描边;其余配白。 */
+const TEXT_OUTLINE: Record<OpColor, string> = {
+  red: "#fff", yellow: "#000", green: "#fff", blue: "#fff",
+};
+
+/**
+ * 生产环境的文字度量。每次新建一张 1×1 画布,代价可忽略(measureText 不依赖画布
+ * 尺寸),换来的是不必在模块里留一个长期存活的画布。
+ *
+ * 取不到 2D 上下文时退回按字数估算的宽度,而**不是**抛异常:命中判定跑在
+ * mousedown 路径上,让它抛会把整个点击处理打断,用户看到的是「文字工具点了没反应」。
+ * 估算值不准,但不准的命中范围远好过功能整个失灵——这与「预览渲染失败只隐藏预览、
+ * 不拖垮覆盖层」是同一个取舍。happy-dom 里没有 2D 上下文,单测走的也正是这条分支。
+ */
+export const measureText: Measure = (text, fontPx) => {
+  try {
+    const { ctx } = make2d(1, 1);
+    ctx.font = fontString(fontPx);
+    return ctx.measureText(text).width;
+  } catch {
+    return text.length * fontPx * 0.6;
+  }
+};
 
 /** 马赛克块边长。随位图宽度自适应——写死常数在高分屏上会小到看不出遮挡。 */
 export function blockSizeFor(bmpWidth: number): number {
@@ -69,6 +106,29 @@ function drawArrow(ctx: CanvasRenderingContext2D, op: ArrowOp, crop: Rect): void
   ctx.restore();
 }
 
+/** 单行文字。先描一圈对比色再填充——红字压在红按钮上,没有描边就是废的。 */
+function drawText(ctx: CanvasRenderingContext2D, op: TextOp, crop: Rect, caret?: number): void {
+  const x = op.at.x - crop.x;
+  const y = op.at.y - crop.y;
+  ctx.save();
+  ctx.font = fontString(op.fontPx);
+  ctx.textBaseline = "top";
+  ctx.lineWidth = Math.max(2, Math.round(op.fontPx / 6));
+  // 不设 round 会在笔画尖角处甩出毛刺。
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = TEXT_OUTLINE[op.color];
+  ctx.strokeText(op.text, x, y);
+  ctx.fillStyle = OP_COLORS[op.color];
+  ctx.fillText(op.text, x, y);
+  if (caret !== undefined) {
+    // 光标由画布自己画:位置靠 measureText 算前缀宽度,与文字用的是同一个字体串,
+    // 所以它一定落在正确的字符之间。光标不入最终图像——保存时不传 caret。
+    const cx = x + ctx.measureText(op.text.slice(0, caret)).width;
+    ctx.fillRect(cx, y, Math.max(1, Math.round(op.fontPx / 12)), Math.round(op.fontPx * 1.25));
+  }
+  ctx.restore();
+}
+
 /**
  * 底图裁剪 + 标注。
  *
@@ -125,10 +185,11 @@ export function renderAnnotated(
     out.ctx.drawImage(masked.canvas, 0, 0);
   }
 
-  // rect、arrow 的绘制分支;text 由 Task 9 加在这里。
+  // rect、arrow、text 的绘制分支。光标只画在草稿那一条上。
   for (const op of list) {
     if (op.kind === "rect") drawRect(out.ctx, op, crop);
     else if (op.kind === "arrow") drawArrow(out.ctx, op, crop);
+    else if (op.kind === "text") drawText(out.ctx, op, crop, op.id === draft?.op.id ? draft?.caret : undefined);
   }
   return out.canvas;
 }

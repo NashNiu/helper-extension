@@ -806,3 +806,163 @@ describe("copyRegion 在非安全上下文(http 页面)下的兜底", () => {
     expect(toastText()).toContain(translate("en", "shot.copied"));
   });
 });
+
+describe("文字工具", () => {
+  function textInput(): HTMLInputElement {
+    return host()!.shadowRoot!.querySelector("[data-shot-text-input]") as HTMLInputElement;
+  }
+  function pickTool(t: string): void {
+    (host()!.shadowRoot!.querySelector(`[data-tool="${t}"]`) as HTMLButtonElement).click();
+  }
+  function clickSurface(x: number, y: number): void {
+    const surface = host()!.shadowRoot!.querySelector("[data-shot-surface]")!;
+    surface.dispatchEvent(new MouseEvent("mousedown", { clientX: x, clientY: y, button: 0, bubbles: true }));
+    surface.dispatchEvent(new MouseEvent("mouseup", { clientX: x, clientY: y, bubbles: true }));
+  }
+
+  it("在选区里点一下就能打字，定稿后成为一条 text op", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码——文字定位要用到位图换算
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "注意这里";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const ops = copy.mock.calls[0][2] as Ops;
+    const op = ops.list.find((o) => o.kind === "text") as { text: string; color: string };
+    expect(op.text).toBe("注意这里");
+    expect(op.color).toBe("red");
+  });
+
+  it("什么都没打就定稿，不会留下一条空文字", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect((copy.mock.calls[0][2] as Ops).list.some((o) => o.kind === "text")).toBe(false);
+  });
+
+  it("编辑期间按 Esc 只定稿，不关闭覆盖层——再按一次才关", async () => {
+    showOverlay(DATA_URL, vi.fn(async () => {}));
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "x";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }));
+    expect(host()).not.toBeNull();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(host()).toBeNull();
+  });
+
+  it("编辑期间按 Enter 不触发保存——那次回车是给文字的", async () => {
+    const copy = vi.fn(async () => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "x";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    await Promise.resolve();
+    expect(copy).not.toHaveBeenCalled();
+    expect(host()).not.toBeNull();
+  });
+
+  it("点回已有文字能改内容，改完仍在列表原位置——层叠顺序不能变", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "甲";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    pickTool("rect");
+    drag([200, 200], [300, 260]);
+    pickTool("text");
+    clickSurface(102, 105); // 点回那条文字
+    textInput().value = "乙";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const ops = copy.mock.calls[0][2] as Ops;
+    expect(ops.list.map((o) => o.kind)).toEqual(["text", "rect"]);
+    expect((ops.list[0] as { text: string }).text).toBe("乙");
+  });
+
+  it("改完文字后撤销，恢复的是上一版内容，而不是把整条删掉", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "甲";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    clickSurface(102, 105);
+    textInput().value = "乙";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    (host()!.shadowRoot!.querySelector("[data-undo]") as HTMLButtonElement).click();
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const ops = copy.mock.calls[0][2] as Ops;
+    expect(ops.list).toHaveLength(1);
+    expect((ops.list[0] as { text: string }).text).toBe("甲");
+  });
+
+  it("把已有文字清空再定稿，那条就被删掉", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "甲";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    clickSurface(102, 105);
+    textInput().value = "";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect((copy.mock.calls[0][2] as Ops).list).toHaveLength(0);
+  });
+
+  it("点保存时还在输入中，那条文字也要一起存进去", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "还没按回车";
+    textInput().dispatchEvent(new Event("input"));
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const op = (copy.mock.calls[0][2] as Ops).list.find((o) => o.kind === "text") as { text: string };
+    expect(op.text).toBe("还没按回车");
+  });
+});

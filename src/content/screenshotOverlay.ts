@@ -7,11 +7,14 @@ import {
   effectiveList,
   emptyHistory,
   emptyOps,
+  fontSize,
   hasMosaic,
+  hitTest,
   lineWidth,
   nextOpId,
   pushOp,
   record,
+  replaceOp,
   rewind,
   canUndo,
   toBitmapPt,
@@ -23,12 +26,14 @@ import {
   type OpColor,
   type Ops,
   type Pt,
+  type TextOp,
 } from "../shared/capture/annotate";
-import { pixelateCrop, renderAnnotated } from "../shared/capture/render";
+import { measureText, pixelateCrop, renderAnnotated } from "../shared/capture/render";
 import { SHOW_OVERLAY, type ShowOverlayMsg } from "../shared/capture/messages";
 import { translate, type Locale } from "../i18n/core";
 import { currentLocale } from "../shared/locale";
 import { createToolbar, type Tool } from "./overlay/toolbar";
+import { createTextEditor } from "./overlay/textEditor";
 
 export const OVERLAY_ID = "helper-shot-overlay";
 
@@ -358,6 +363,37 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   let ops: Ops = emptyOps();
   let history: History = emptyHistory();
 
+  const editor = createTextEditor(root, {
+    onChange: () => refreshPreview(editor.draft() ?? undefined),
+    onCommit: (d) => {
+      const op = d.op as TextOp;
+      if (d.replacesId === null) {
+        // 什么都没打就定稿:不留下一条看不见的空文字。
+        if (op.text !== "") mutate(pushOp(ops, op));
+        else refreshPreview();
+      } else {
+        // 清空内容 = 删掉这条。replaceOp 的第三个参数传 null 即为删除。
+        mutate(replaceOp(ops, d.replacesId, op.text === "" ? null : op));
+      }
+    },
+  }, (p) => ({ x: Math.round(p.x / scaleNow()), y: Math.round(p.y / scaleNow()) }));
+  surface.append(editor.el);
+
+  /** 当前的位图/CSS 比例。拿不到位图时退回 1。 */
+  function scaleNow(): number {
+    const bmp = live?.bmp;
+    return bmp ? bitmapScale(bmp.width, window.innerWidth) : 1;
+  }
+
+  /** 开始编辑一条文字。begin 返回 false 表示没拿到焦点,当作什么都没发生。 */
+  function beginText(op: TextOp, replacesId: string | null): void {
+    if (!editor.begin(op, replacesId)) return;
+    refreshPreview(editor.draft() ?? undefined);
+  }
+
+  // 按在已有文字上、还没松手。moved 一旦为真就按「拖动」处理,否则松手时进入编辑。
+  let textDown: { op: TextOp; at: Pt; moved: boolean } | null = null;
+
   /** 把按钮条贴到选区右下角外侧;下方放不下就收进选区内部,免得按钮跑到视口外点不到。 */
   function placeActions(r: Rect): void {
     actions.style.display = "flex";
@@ -380,6 +416,8 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
 
   /** 用户确认保存:把待定选区交给 copy,拷完拆除覆盖层。 */
   function commit(): void {
+    // 点保存时可能还在输入:先把那条文字定稿,否则它会被整个丢掉。
+    if (editor.isEditing()) editor.commit();
     if (!pending) return;
     // 重入守卫:拷贝进行中(committing === true)时,位图已经交出去了,live.bmp
     // 是 null。再次点保存(或者 Enter 又被触发一次)不该再跑一遍——第二次的
@@ -499,6 +537,20 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
       else refreshPreview(); // 丢掉这一笔,把预览恢复成没有草稿的样子
       return;
     }
+    if (textDown) {
+      const down = textDown;
+      textDown = null;
+      const p = toBitmapPt({ x: clientX, y: clientY }, scaleNow());
+      if (down.moved) {
+        // 拖动:只挪位置,不进编辑。
+        const at = { x: down.op.at.x + (p.x - down.at.x), y: down.op.at.y + (p.y - down.at.y) };
+        mutate(replaceOp(ops, down.op.id, { ...down.op, at }));
+      } else {
+        // 原地松手 = 想改这条字。
+        beginText(down.op, down.op.id);
+      }
+      return;
+    }
     if (!start) return;
     const r = normalizeRect(start.x, start.y, clientX, clientY);
     start = null;
@@ -529,6 +581,24 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     if ((tool === "rect" || tool === "arrow") && pending) {
       shapeStart = { x: e.clientX, y: e.clientY };
       e.preventDefault();
+      return;
+    }
+    if (tool === "text" && pending) {
+      e.preventDefault();
+      // 已经在编辑:这一下点击先把上一条定稿,再决定要不要开新的。
+      if (editor.isEditing()) editor.commit();
+      const s = scaleNow();
+      const p = toBitmapPt({ x: e.clientX, y: e.clientY }, s);
+      const hit = hitTest(ops.list, p, measureText);
+      if (hit) {
+        // 按在已有文字上:现在还分不清是想拖动还是想改字,等松手看有没有位移。
+        textDown = { op: hit, at: p, moved: false };
+        return;
+      }
+      beginText(
+        { kind: "text", id: nextOpId(), at: p, text: "", color, fontPx: fontSize(brush, s) },
+        null,
+      );
       return;
     }
     // 重新开拖 = 对上一个选区不满意。先把工具栏收起来,否则它会悬在半空挡着新选区。
@@ -579,6 +649,17 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
       refreshPreview(op ? { op, replacesId: null } : undefined);
       return;
     }
+    if (textDown) {
+      const p = toBitmapPt({ x: e.clientX, y: e.clientY }, scaleNow());
+      if (!textDown.moved && p.x === textDown.at.x && p.y === textDown.at.y) return;
+      textDown.moved = true;
+      const at = {
+        x: textDown.op.at.x + (p.x - textDown.at.x),
+        y: textDown.op.at.y + (p.y - textDown.at.y),
+      };
+      refreshPreview({ op: { ...textDown.op, at }, replacesId: textDown.op.id });
+      return;
+    }
     if (!start) return;
     paint(normalizeRect(start.x, start.y, e.clientX, e.clientY));
   });
@@ -604,6 +685,10 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   });
 
   const onKey = (e: KeyboardEvent) => {
+    // 正在输入文字:Esc/Enter/Ctrl+Z 都归那个 input,覆盖层不插手。编辑器自己会
+    // stopPropagation,但它绑在 input 上、这里绑在 document 捕获阶段——捕获先于
+    // 目标,所以必须在这里显式让位,否则 Enter 会顺带保存整张截图。
+    if (editor.isEditing()) return;
     if (e.key === "Escape") {
       e.stopPropagation();
       hideOverlay();
