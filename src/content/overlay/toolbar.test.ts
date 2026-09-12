@@ -1,15 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { createToolbar, type ToolbarCallbacks } from "./toolbar";
 
+function noopCallbacks(): ToolbarCallbacks {
+  return { onTool: vi.fn(), onBrush: vi.fn(), onColor: vi.fn(), onUndo: vi.fn(), onCancel: vi.fn(), onSave: vi.fn() };
+}
+
 function make(overrides: Partial<ToolbarCallbacks> = {}) {
-  const cb: ToolbarCallbacks = {
-    onTool: vi.fn(),
-    onBrush: vi.fn(),
-    onUndo: vi.fn(),
-    onCancel: vi.fn(),
-    onSave: vi.fn(),
-    ...overrides,
-  };
+  const cb: ToolbarCallbacks = { ...noopCallbacks(), ...overrides };
   return { cb, bar: createToolbar(cb) };
 }
 
@@ -122,5 +119,70 @@ describe("createToolbar", () => {
     bar.setBrush("large");
     expect(bar.el.querySelector("[data-brush='medium']")!.getAttribute("aria-pressed")).toBe("false");
     expect(bar.el.querySelector("[data-brush='large']")!.getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
+describe("五个工具与四色", () => {
+  it("五个工具按钮都在，且默认选中「选区」", () => {
+    const tb = createToolbar(noopCallbacks());
+    for (const t of ["select", "mosaic", "rect", "arrow", "text"] as const) {
+      expect(tb.el.querySelector(`[data-tool="${t}"]`)).not.toBeNull();
+    }
+    expect(tb.el.querySelector('[data-tool="select"]')!.getAttribute("aria-pressed")).toBe("true");
+    expect(tb.el.querySelector('[data-tool="rect"]')!.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("setTool 把按下态挪到新工具上", () => {
+    const tb = createToolbar(noopCallbacks());
+    tb.setTool("arrow");
+    expect(tb.el.querySelector('[data-tool="arrow"]')!.getAttribute("aria-pressed")).toBe("true");
+    expect(tb.el.querySelector('[data-tool="select"]')!.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("点工具按钮只回调，不自作主张改自己的状态——状态由覆盖层说了算", () => {
+    const onTool = vi.fn();
+    const tb = createToolbar({ ...noopCallbacks(), onTool });
+    (tb.el.querySelector('[data-tool="text"]') as HTMLButtonElement).click();
+    expect(onTool).toHaveBeenCalledWith("text");
+    expect(tb.el.querySelector('[data-tool="text"]')!.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("四个颜色按钮都在，默认选中红", () => {
+    const tb = createToolbar(noopCallbacks());
+    for (const c of ["red", "yellow", "green", "blue"] as const) {
+      expect(tb.el.querySelector(`[data-color="${c}"]`)).not.toBeNull();
+    }
+    expect(tb.el.querySelector('[data-color="red"]')!.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("颜色行只在矩形/箭头/文字下露出——选区和马赛克下它是噪音", () => {
+    const tb = createToolbar(noopCallbacks());
+    const colors = tb.el.querySelector<HTMLElement>("[data-colors]")!;
+    tb.setTool("select");
+    expect(colors.style.display).toBe("none");
+    tb.setTool("mosaic");
+    expect(colors.style.display).toBe("none");
+    for (const t of ["rect", "arrow", "text"] as const) {
+      tb.setTool(t);
+      expect(colors.style.display).toBe("flex");
+    }
+  });
+
+  it("粗细行在四个绘制工具下都露出，只有「选区」下隐藏——它同时是笔刷、线宽和字号", () => {
+    const tb = createToolbar(noopCallbacks());
+    const brushes = tb.el.querySelector<HTMLElement>("[data-brushes]")!;
+    tb.setTool("select");
+    expect(brushes.style.display).toBe("none");
+    for (const t of ["mosaic", "rect", "arrow", "text"] as const) {
+      tb.setTool(t);
+      expect(brushes.style.display).toBe("flex");
+    }
+  });
+
+  it("setColor 把按下态挪到新颜色上", () => {
+    const tb = createToolbar(noopCallbacks());
+    tb.setColor("green");
+    expect(tb.el.querySelector('[data-color="green"]')!.getAttribute("aria-pressed")).toBe("true");
+    expect(tb.el.querySelector('[data-color="red"]')!.getAttribute("aria-pressed")).toBe("false");
   });
 });

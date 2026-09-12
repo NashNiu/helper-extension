@@ -127,3 +127,26 @@ export function brushRadius(size: BrushSize, scale: number): number {
   // 至少 1:半径 0 的笔迹画出来什么都没有,用户会以为功能坏了。
   return Math.max(1, Math.round(BRUSH_CSS_RADIUS[size] * scale));
 }
+
+/** 标注配色。四档足够在大多数截图上找到一个显眼的,又不至于撑爆工具栏。 */
+export const OP_COLORS: Record<OpColor, string> = {
+  red: "#f5222d",
+  yellow: "#fadb14",
+  green: "#52c41a",
+  blue: "#1677ff",
+};
+export const DEFAULT_COLOR: OpColor = "red";
+
+/** 线宽(CSS 像素)。与马赛克笔刷共用同一组三档按钮。 */
+export const LINE_CSS_WIDTH: Record<BrushSize, number> = { small: 2, medium: 4, large: 7 };
+/** 字号(CSS 像素)。 */
+export const FONT_CSS_SIZE: Record<BrushSize, number> = { small: 14, medium: 20, large: 30 };
+
+export function lineWidth(size: BrushSize, scale: number): number {
+  // 至少 1:0 宽的线画出来什么都没有,用户会以为功能坏了。
+  return Math.max(1, Math.round(LINE_CSS_WIDTH[size] * scale));
+}
+
+export function fontSize(size: BrushSize, scale: number): number {
+  return Math.max(1, Math.round(FONT_CSS_SIZE[size] * scale));
+}

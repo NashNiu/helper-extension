@@ -3,6 +3,7 @@ import {
   bitmapScale,
   brushRadius,
   DEFAULT_BRUSH,
+  DEFAULT_COLOR,
   effectiveList,
   emptyHistory,
   emptyOps,
@@ -17,6 +18,7 @@ import {
   type Draft,
   type History,
   type MosaicOp,
+  type OpColor,
   type Ops,
   type Pt,
 } from "../shared/capture/annotate";
@@ -163,6 +165,12 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
 
   let tool: Tool = "select";
   let brush: BrushSize = DEFAULT_BRUSH;
+  // 当前选中的颜色。矩形/箭头/文字真正读它来构造 RectOp/ArrowOp/TextOp 是下一个
+  // 任务的活,这里只接好回调与状态。noUnusedLocals 只认"有没有被读过",不认
+  // "将来会被读"——下面这行 void 是唯一的读取点,等 Task 5 接上真正的消费者
+  // (构造带 color 字段的 op)之后就可以删掉它。
+  let color: OpColor = DEFAULT_COLOR;
+  void color;
 
   const toolbar = createToolbar({
     onTool: (t) => {
@@ -173,6 +181,10 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     onBrush: (b) => {
       brush = b;
       toolbar.setBrush(b);
+    },
+    onColor: (c) => {
+      color = c;
+      toolbar.setColor(c);
     },
     onUndo: () => doUndo(),
     onCancel: () => hideOverlay(),

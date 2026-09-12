@@ -15,6 +15,12 @@ import {
   emptyHistory,
   record,
   rewind,
+  OP_COLORS,
+  DEFAULT_COLOR,
+  LINE_CSS_WIDTH,
+  FONT_CSS_SIZE,
+  lineWidth,
+  fontSize,
   type Op,
   type Ops,
 } from "./annotate";
@@ -174,6 +180,40 @@ describe("撤销快照栈", () => {
     const h = emptyHistory();
     record(h, { list: [M("op-1")] });
     expect(canUndo(h)).toBe(false);
+  });
+});
+
+describe("线宽与字号", () => {
+  it("三档线宽钉死在约定数值上——只校验递增,一个打错的常量也能蒙混过关", () => {
+    expect(LINE_CSS_WIDTH).toEqual({ small: 2, medium: 4, large: 7 });
+  });
+
+  it("三档字号钉死在约定数值上", () => {
+    expect(FONT_CSS_SIZE).toEqual({ small: 14, medium: 20, large: 30 });
+  });
+
+  it("四个颜色值钉死", () => {
+    expect(OP_COLORS).toEqual({ red: "#f5222d", yellow: "#fadb14", green: "#52c41a", blue: "#1677ff" });
+  });
+
+  it("默认色是红", () => {
+    expect(DEFAULT_COLOR).toBe("red");
+  });
+
+  it("线宽按比例换算到位图尺度", () => {
+    expect(lineWidth("medium", 2)).toBe(8);
+  });
+
+  it("线宽再小也至少 1 像素——0 宽的线画不出任何东西", () => {
+    expect(lineWidth("small", 0.1)).toBe(1);
+  });
+
+  it("字号按比例换算到位图尺度", () => {
+    expect(fontSize("large", 2)).toBe(60);
+  });
+
+  it("字号再小也至少 1 像素", () => {
+    expect(fontSize("small", 0.01)).toBe(1);
   });
 });
 
