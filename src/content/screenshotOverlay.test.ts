@@ -11,7 +11,7 @@ vi.mock("../shared/locale", () => ({
 }));
 
 import { showOverlay, hideOverlay, showToast, copyRegion, OVERLAY_ID, TOAST_ID } from "./screenshotOverlay";
-import { emptyOps, type MosaicOp, type Ops } from "../shared/capture/annotate";
+import { emptyOps, type MosaicOp, type Ops, type Pt } from "../shared/capture/annotate";
 import type { Rect } from "../shared/capture/rect";
 import { translate } from "../i18n/core";
 
@@ -636,6 +636,37 @@ describe("矩形框工具", () => {
     expect(undoBtn.disabled).toBe(false);
     undoBtn.click();
     expect(undoBtn.disabled).toBe(true);
+  });
+});
+
+describe("箭头工具", () => {
+  it("拖一次生成一个 arrow op，起终点都是位图坐标", async () => {
+    const ops = await drawThenSave("arrow", [50, 50], [200, 160]);
+    const op = ops.list.find((o) => o.kind === "arrow") as { from: Pt; to: Pt } | undefined;
+    expect(op).toBeDefined();
+    expect(op!.from.x).toBeGreaterThan(50); // scale ≈ 1.95
+    expect(op!.to.x).toBeGreaterThan(op!.from.x);
+  });
+
+  it("点一下不拖不生成箭头", async () => {
+    const ops = await drawThenSave("arrow", [50, 50], [50, 50]);
+    expect(ops.list.some((o) => o.kind === "arrow")).toBe(false);
+  });
+
+  it("矩形和箭头能共存，且按绘制先后排列", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码——后面的形状拖拽要用到位图
+    drag([10, 10], [400, 300]);
+    (host()!.shadowRoot!.querySelector('[data-tool="rect"]') as HTMLButtonElement).click();
+    drag([50, 50], [150, 120]);
+    (host()!.shadowRoot!.querySelector('[data-tool="arrow"]') as HTMLButtonElement).click();
+    drag([60, 60], [200, 160]);
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const ops = copy.mock.calls[0][2] as Ops;
+    expect(ops.list.map((o) => o.kind)).toEqual(["rect", "arrow"]);
   });
 });
 

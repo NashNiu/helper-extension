@@ -461,6 +461,13 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
         width: lineWidth(brush, scale),
       };
     }
+    if (tool === "arrow") {
+      const from = toBitmapPt(origin, scale);
+      const to = toBitmapPt({ x: toX, y: toY }, scale);
+      // 起终点重合画不出方向,当误点丢掉。
+      if (from.x === to.x && from.y === to.y) return null;
+      return { kind: "arrow", id: nextOpId(), from, to, color, width: lineWidth(brush, scale) };
+    }
     return null;
   }
 

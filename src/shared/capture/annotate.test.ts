@@ -21,6 +21,7 @@ import {
   FONT_CSS_SIZE,
   lineWidth,
   fontSize,
+  arrowHead,
   type Op,
   type Ops,
 } from "./annotate";
@@ -214,6 +215,42 @@ describe("线宽与字号", () => {
 
   it("字号再小也至少 1 像素", () => {
     expect(fontSize("small", 0.01)).toBe(1);
+  });
+});
+
+describe("arrowHead", () => {
+  it("水平向右的箭头，三角形的尖端就是终点", () => {
+    const head = arrowHead({ x: 0, y: 0 }, { x: 100, y: 0 }, 4)!;
+    expect(head[0]).toEqual({ x: 100, y: 0 });
+  });
+
+  it("两翼对称地分居轴线两侧", () => {
+    const [, a, b] = arrowHead({ x: 0, y: 0 }, { x: 100, y: 0 }, 4)!;
+    expect(a.x).toBeCloseTo(b.x, 6);
+    expect(a.y).toBeCloseTo(-b.y, 6);
+  });
+
+  it("两翼落在终点后方——箭头要指向终点，不能越过它", () => {
+    const [, a, b] = arrowHead({ x: 0, y: 0 }, { x: 100, y: 0 }, 4)!;
+    expect(a.x).toBeLessThan(100);
+    expect(b.x).toBeLessThan(100);
+  });
+
+  it("头长随线宽变大——细线配大箭头会很怪", () => {
+    const thin = arrowHead({ x: 0, y: 0 }, { x: 100, y: 0 }, 2)!;
+    const thick = arrowHead({ x: 0, y: 0 }, { x: 100, y: 0 }, 8)!;
+    expect(100 - thick[1].x).toBeGreaterThan(100 - thin[1].x);
+  });
+
+  it("竖直向下也对称，不是只有水平才算对——旋转变换写错时这条会挂", () => {
+    const [tip, a, b] = arrowHead({ x: 0, y: 0 }, { x: 0, y: 100 }, 4)!;
+    expect(tip).toEqual({ x: 0, y: 100 });
+    expect(a.y).toBeCloseTo(b.y, 6);
+    expect(a.x).toBeCloseTo(-b.x, 6);
+  });
+
+  it("起终点重合时返回 null——零长度算不出方向", () => {
+    expect(arrowHead({ x: 5, y: 5 }, { x: 5, y: 5 }, 4)).toBeNull();
   });
 });
 

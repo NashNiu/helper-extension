@@ -150,3 +150,30 @@ export function lineWidth(size: BrushSize, scale: number): number {
 export function fontSize(size: BrushSize, scale: number): number {
   return Math.max(1, Math.round(FONT_CSS_SIZE[size] * scale));
 }
+
+/** 箭头头部的半角(弧度)。25° 是一个既显眼又不至于臃肿的开口。 */
+const ARROW_HALF_ANGLE = (25 * Math.PI) / 180;
+
+/**
+ * 算出箭头三角形的三个顶点:[尖端, 翼一, 翼二]。尖端就是终点。
+ *
+ * 单独拎成纯函数而不是写在绘制里,是因为它是这个工具唯一有实质计算的部分,
+ * 而绘制本身在 happy-dom 里无法断言——分开才测得到。
+ *
+ * 起终点重合时返回 null:零长度算不出方向,调用方应当整支箭头都不画。
+ */
+export function arrowHead(from: Pt, to: Pt, width: number): [Pt, Pt, Pt] | null {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.hypot(dx, dy);
+  if (len === 0) return null;
+  // 头长随线宽走:细线配大箭头会很怪。
+  const headLen = 4 * width;
+  // 从终点朝起点方向回退,再左右各转开半角。
+  const angle = Math.atan2(dy, dx);
+  const wing = (sign: number): Pt => ({
+    x: to.x - headLen * Math.cos(angle + sign * ARROW_HALF_ANGLE),
+    y: to.y - headLen * Math.sin(angle + sign * ARROW_HALF_ANGLE),
+  });
+  return [{ x: to.x, y: to.y }, wing(1), wing(-1)];
+}

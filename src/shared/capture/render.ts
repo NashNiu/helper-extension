@@ -1,5 +1,5 @@
 import type { Rect } from "./rect";
-import { effectiveList, OP_COLORS, type Draft, type MosaicOp, type Ops, type RectOp } from "./annotate";
+import { arrowHead, effectiveList, OP_COLORS, type ArrowOp, type Draft, type MosaicOp, type Ops, type RectOp } from "./annotate";
 
 function make2d(w: number, h: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
   const canvas = document.createElement("canvas");
@@ -43,6 +43,29 @@ function drawRect(ctx: CanvasRenderingContext2D, op: RectOp, crop: Rect): void {
   ctx.lineWidth = op.width;
   ctx.lineJoin = "miter";
   ctx.strokeRect(op.r.x - crop.x, op.r.y - crop.y, op.r.w, op.r.h);
+  ctx.restore();
+}
+
+/** 直线 + 实心三角箭头。 */
+function drawArrow(ctx: CanvasRenderingContext2D, op: ArrowOp, crop: Rect): void {
+  const head = arrowHead(op.from, op.to, op.width);
+  if (!head) return; // 零长度,整支不画
+  ctx.save();
+  ctx.strokeStyle = OP_COLORS[op.color];
+  ctx.fillStyle = OP_COLORS[op.color];
+  ctx.lineWidth = op.width;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(op.from.x - crop.x, op.from.y - crop.y);
+  ctx.lineTo(op.to.x - crop.x, op.to.y - crop.y);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(head[0].x - crop.x, head[0].y - crop.y);
+  ctx.lineTo(head[1].x - crop.x, head[1].y - crop.y);
+  ctx.lineTo(head[2].x - crop.x, head[2].y - crop.y);
+  ctx.closePath();
+  ctx.fill();
   ctx.restore();
 }
 
@@ -102,9 +125,10 @@ export function renderAnnotated(
     out.ctx.drawImage(masked.canvas, 0, 0);
   }
 
-  // rect 的绘制分支;arrow、text 由 Task 6、9 依次加在这里。
+  // rect、arrow 的绘制分支;text 由 Task 9 加在这里。
   for (const op of list) {
     if (op.kind === "rect") drawRect(out.ctx, op, crop);
+    else if (op.kind === "arrow") drawArrow(out.ctx, op, crop);
   }
   return out.canvas;
 }
