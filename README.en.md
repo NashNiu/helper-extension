@@ -24,7 +24,7 @@ A Chrome Side Panel extension: capture reminders, timers, todos, and clipboard s
 | Timer | Classic pomodoro cycles (work/break, long break every 4th), pause/resume/reset, estimated end, floating widget; the toolbar icon badge shows the remaining minutes and the current phase (work / break / paused / awaiting) |
 | Due chime | Reminders and timers play a short locally synthesized chime on due (via an offscreen document), and the notification's own system sound is suppressed so the two don't overlap; can be turned off under Mine |
 | Clipboard | Save text/images, pin & search; right-click "save image", one-click "add from clipboard" in the panel |
-| Screenshot | Three independently toggleable entry points in Mine — keyboard shortcut (Ctrl+Shift+S), page right-click menu, side panel button; freezes the page, drag to select an area, the crop is written straight to the system clipboard (not saved, never uploaded) |
+| Screenshot | Three independently toggleable entry points in Mine — keyboard shortcut (Ctrl+Shift+S), page right-click menu, side panel button; freezes the page, drag to select an area, then annotate it — pixelation, rectangles, arrows, text (text can be re-edited and dragged); four colours, three sizes, undo; the crop reaches the system clipboard only after you confirm, cancel discards it (not saved, never uploaded) |
 | Quick add | Natural-language input in the top bar. Default **local rule-based parsing** (Chinese + English, offline, zero backend) auto-routes to reminder / timer / todo; with your own **DeepSeek key** it switches to AI parsing (auto-falls back to local on failure) |
 | Mine | Open via the top-right gear to switch UI language, set your DeepSeek key, and view completed todos & past reminders (no login in this version) |
 

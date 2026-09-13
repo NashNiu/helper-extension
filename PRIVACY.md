@@ -14,7 +14,7 @@ We designed the Extension to be **local‑first**: it works without an account, 
 
 **Clipboard auto-capture (optional, on by default).** When enabled, text you copy on web pages is saved to your local clipboard history so you can find it later, and it is stored only on your device. Only text you actually select and copy is captured — copies made without a text selection (for example a password manager writing to your clipboard) are not. You can turn auto-capture off anytime in the Clipboard tab.
 
-**Screenshots.** You can start a screenshot with the keyboard shortcut, the page's right-click menu, or the button in the side panel (each can be turned off independently in settings). The page is frozen and you drag to select an area; the cropped image is written to your **system clipboard only**. The Extension does not store the screenshot, does not add it to its own clipboard history, and never uploads it anywhere.
+**Screenshots.** You can start a screenshot with the keyboard shortcut, the page's right-click menu, or the button in the side panel (each can be turned off independently in settings). The page is frozen and you drag to select an area, and you can annotate that area — pixelation, rectangles, arrows and text. All annotation happens on your device, drawn onto a canvas inside the page. Nothing reaches your clipboard until you press confirm; pressing cancel discards the screenshot entirely. The cropped, annotated image is then written to your **system clipboard only**. The Extension does not store the screenshot, does not add it to its own clipboard history, and never uploads it anywhere.
 
 **No account is required.** This version of the Extension does not ask you to register or sign in, and does not collect your name, email address, or any personal identifier to use its core features.
 
@@ -42,7 +42,7 @@ If you never sign in, no content is sent to our server and everything remains lo
 - **content script (all sites) — clipboard auto-capture** — when enabled, reads the text you copy on a page so it can be saved to your local clipboard history. You can disable this in the Clipboard tab; nothing is read or sent when it is off.
 - **activeTab** — temporary access to the current tab, granted only by your click on the keyboard shortcut or the page's right-click menu, used to capture the visible area for a screenshot.
 - **commands (Ctrl+Shift+S)** — the keyboard shortcut that starts a screenshot.
-- **content script (all sites) — screenshot overlay** — runs on every page so it is ready to show the frozen screenshot and your selection box the moment a screenshot starts; it does not read page content and does nothing until a screenshot is triggered.
+- **content script (all sites) — screenshot overlay** — runs on every page so it is ready to show the frozen screenshot, your selection box and the annotation toolbar the moment a screenshot starts; it does not read page content and does nothing until a screenshot is triggered.
 - **optional host permission (`<all_urls>`)** — requested only when you click the screenshot button in the side panel, because a side‑panel click doesn't grant `activeTab` the way the shortcut or right‑click menu does. You can revoke this permission at any time from the extension's details page in your browser.
 - **host permission (our backend domain)** — used only to sync data when you are signed in (see Section 2).
 - **host permission (api.deepseek.com)** — used only when you set your own DeepSeek key, to send your input directly to DeepSeek for parsing.
@@ -90,7 +90,7 @@ Questions or data‑deletion requests: **niutengfei123@gmail.com**
 
 **剪贴板自动捕获(可选,默认开启)。** 开启后,你在网页上复制的文字会被保存到本地剪贴板历史,便于稍后查找,且仅保存在你的设备上。只有你实际选中并复制的文字才会被捕获——没有文字选区的复制(例如密码管理器直接写入剪贴板)不会被捕获。你可以随时在剪贴板页关闭自动捕获。
 
-**截图。** 你可以通过键盘快捷键、页面右键菜单或侧边栏按钮发起截图(三种入口均可在设置中独立关闭)。发起后页面会被冻结,你拖动框选一块区域,裁剪出的图片只会写入**系统剪贴板**。本扩展不会保存这张截图,不会把它加入自己的剪贴板历史,也不会上传到任何地方。
+**截图。** 你可以通过键盘快捷键、页面右键菜单或侧边栏按钮发起截图(三种入口均可在设置中独立关闭)。发起后页面会被冻结,你拖动框选一块区域,并可在这块区域上添加标注——马赛克、矩形框、箭头、文字。所有标注都在你的设备上完成,画在页面内的一块画布上。在你点击确认之前,不会有任何内容进入剪贴板;点取消则整张丢弃。裁剪并标注后的图片只会写入**系统剪贴板**。本扩展不会保存这张截图,不会把它加入自己的剪贴板历史,也不会上传到任何地方。
 
 **无需账号。** 本版本不要求注册或登录,使用核心功能时不收集你的姓名、邮箱或任何个人身份信息。
 
@@ -118,7 +118,7 @@ Questions or data‑deletion requests: **niutengfei123@gmail.com**
 - **内容脚本(所有网站)—— 剪贴板自动捕获** —— 开启后,读取你在网页复制的文字以存入本地剪贴板历史。可在剪贴板页关闭;关闭时不读取、不发送任何内容。
 - **activeTab** —— 对当前标签页的临时访问权限,仅在你点击键盘快捷键或页面右键菜单时被授予,用于截取可视区域画面。
 - **commands(Ctrl+Shift+S)** —— 用于发起截图的键盘快捷键。
-- **内容脚本(所有网站)—— 截图蒙层** —— 在每个页面常驻加载,以便截图一旦发起就能立即显示冻结画面与框选框;它不读取页面内容,截图未触发时不做任何事。
+- **内容脚本(所有网站)—— 截图蒙层** —— 在每个页面常驻加载,以便截图一旦发起就能立即显示冻结画面、框选框与标注工具栏;它不读取页面内容,截图未触发时不做任何事。
 - **可选主机权限(`<all_urls>`)** —— 仅在你点击侧边栏的截图按钮时才会申请,因为侧边栏点击不像快捷键或右键菜单那样能获得 `activeTab`。你可以随时在浏览器的扩展详情页撤销这项权限。
 - **主机权限(我们的后端域名)** —— 仅在你登录时用于同步数据(见第 2 节)。
 - **主机权限(api.deepseek.com)** —— 仅在你填入自己的 DeepSeek Key 时,用于把你的输入直接发送到 DeepSeek 进行解析。
