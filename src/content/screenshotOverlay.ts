@@ -3,22 +3,37 @@ import {
   bitmapScale,
   brushRadius,
   DEFAULT_BRUSH,
+  DEFAULT_COLOR,
+  effectiveList,
+  emptyHistory,
   emptyOps,
-  isEmpty,
-  pixelateCrop,
-  pushStroke,
-  renderAnnotated,
+  fontSize,
+  hasMosaic,
+  hitTest,
+  lineWidth,
+  nextOpId,
+  pushOp,
+  record,
+  replaceOp,
+  rewind,
+  canUndo,
   toBitmapPt,
-  undo as undoOps,
   type BrushSize,
+  type Draft,
+  type History,
+  type MosaicOp,
+  type Op,
+  type OpColor,
   type Ops,
   type Pt,
-  type Stroke,
+  type TextOp,
 } from "../shared/capture/annotate";
+import { measureText, pixelateCrop, renderAnnotated } from "../shared/capture/render";
 import { SHOW_OVERLAY, type ShowOverlayMsg } from "../shared/capture/messages";
 import { translate, type Locale } from "../i18n/core";
 import { currentLocale } from "../shared/locale";
 import { createToolbar, type Tool } from "./overlay/toolbar";
+import { createTextEditor } from "./overlay/textEditor";
 
 export const OVERLAY_ID = "helper-shot-overlay";
 
@@ -157,9 +172,16 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
 
   let tool: Tool = "select";
   let brush: BrushSize = DEFAULT_BRUSH;
+  // 当前选中的颜色。矩形/箭头/文字构造 RectOp/ArrowOp/TextOp 时读取它。
+  let color: OpColor = DEFAULT_COLOR;
 
   const toolbar = createToolbar({
     onTool: (t) => {
+      // 规格里「点击别处/切换工具/点保存,先定稿再执行原动作」这条,切换工具这一支
+      // 原来只靠按钮抢焦点触发 input 的 blur 来定稿——在真实 Chrome 里成立,但这是
+      // 涌现行为,不是显式契约(happy-dom 的 .click() 就不搬焦点,覆盖层层面测不到
+      // 这条规格行)。这里显式定稿一次,和「点保存」「点击 surface」两条路径对齐。
+      if (editor.isEditing()) editor.commit();
       tool = t;
       toolbar.setTool(t);
       refreshPreview();
@@ -167,6 +189,10 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     onBrush: (b) => {
       brush = b;
       toolbar.setBrush(b);
+    },
+    onColor: (c) => {
+      color = c;
+      toolbar.setColor(c);
     },
     onUndo: () => doUndo(),
     onCancel: () => hideOverlay(),
@@ -205,10 +231,10 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
    * 保存时还是会连它一起存下来。预览要是被工具切换隐藏,用户就会在看不见马赛克
    * 的情况下把带马赛克的图存下去——这正是这套架构要杜绝的「所见非所得」。
    *
-   * partial:正在拖拽、还没落进 ops 里的那一笔(见下面 mousemove 的实时重画),
-   * 只用于渲染,不写回 ops——手一松才由 endDrag 正式 pushStroke。
+   * draft:正在拖拽、还没落进 ops 里的那一笔(见下面 mousemove 的实时重画),
+   * 只用于渲染,不写回 ops——手一松才由 endDrag 正式 pushOp。
    */
-  function refreshPreview(partial?: Stroke): void {
+  function refreshPreview(draft?: Draft): void {
     const bmp = live?.bmp;
     if (!pending || !bmp) {
       hidePreview();
@@ -233,12 +259,14 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     preview.style.width = `${pending.w}px`;
     preview.style.height = `${pending.h}px`;
     try {
+      const list = effectiveList(ops, draft);
       const key = `${b.x},${b.y},${b.w},${b.h}`;
-      if (pixCache?.key !== key) pixCache = { key, canvas: pixelateCrop(bmp, b) };
+      if (hasMosaic(list)) {
+        if (pixCache?.key !== key) pixCache = { key, canvas: pixelateCrop(bmp, b) };
+      }
       // 与保存路径同一个 renderAnnotated——预览就是最终图像本身,只是缩小显示,
       // 不是另起一套近似绘制,这样用户看到的和存下来的才不会走样。
-      const renderOps = partial ? pushStroke(ops, partial) : ops;
-      const out = renderAnnotated(bmp, b, renderOps, pixCache.canvas);
+      const out = renderAnnotated(bmp, b, ops, pixCache?.canvas ?? document.createElement("canvas"), draft);
       const ctx = preview.getContext("2d");
       if (!ctx) throw new Error("2d context unavailable");
       preview.width = out.width;
@@ -253,15 +281,24 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     }
   }
 
+  /** 所有对 ops 的变更都必须走这里,否则那一步就撤销不回来。 */
+  function mutate(next: Ops): void {
+    history = record(history, ops);
+    ops = next;
+    afterOpsChanged();
+  }
+
   /** 操作列表变了就同步撤销按钮——按钮亮着却没东西可撤,比禁用更让人困惑。 */
   function afterOpsChanged(): void {
-    toolbar.setUndoEnabled(!isEmpty(ops));
+    toolbar.setUndoEnabled(canUndo(history));
     refreshPreview();
   }
 
   function doUndo(): void {
-    if (isEmpty(ops)) return; // 空列表上撤销是无操作,不该有任何副作用
-    ops = undoOps(ops);
+    const back = rewind(history);
+    if (!back) return; // 空历史上撤销是无操作,不该有任何副作用
+    history = back.history;
+    ops = back.ops;
     afterOpsChanged();
   }
 
@@ -323,10 +360,46 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   let start: { x: number; y: number } | null = null;
   // 正在涂抹的这一笔。与 start 分开:选区拖动只需要起点,涂抹要留住整条轨迹。
   let painting: Pt[] | null = null;
+  // 正在拖的矩形/箭头的起点(CSS 坐标)。与 start 分开:start 是取景,这个是画标注。
+  let shapeStart: { x: number; y: number } | null = null;
   // 已框好、等用户点保存的选区。null 表示还没框(或刚被取消/重新开拖)。
   let pending: Rect | null = null;
   // 标注操作列表。Task 4 起才会被写入,现在恒为空——但保存路径已经把它传下去了。
   let ops: Ops = emptyOps();
+  let history: History = emptyHistory();
+
+  const editor = createTextEditor(root, {
+    onChange: () => refreshPreview(editor.draft() ?? undefined),
+    onCommit: (d) => {
+      const op = d.op as TextOp;
+      if (d.replacesId === null) {
+        // 什么都没打就定稿:不留下一条看不见的空文字。
+        if (op.text !== "") mutate(pushOp(ops, op));
+        else refreshPreview();
+      } else {
+        // 清空内容 = 删掉这条。replaceOp 的第三个参数传 null 即为删除。
+        mutate(replaceOp(ops, d.replacesId, op.text === "" ? null : op));
+      }
+    },
+  }, (p) => ({ x: Math.round(p.x / scaleNow()), y: Math.round(p.y / scaleNow()) }));
+  surface.append(editor.el);
+
+  /** 当前的位图/CSS 比例。拿不到位图时退回 1。 */
+  function scaleNow(): number {
+    const bmp = live?.bmp;
+    return bmp ? bitmapScale(bmp.width, window.innerWidth) : 1;
+  }
+
+  /** 开始编辑一条文字。begin 返回 false 表示没拿到焦点,当作什么都没发生。 */
+  function beginText(op: TextOp, replacesId: string | null): void {
+    if (!editor.begin(op, replacesId)) return;
+    refreshPreview(editor.draft() ?? undefined);
+  }
+
+  // 按在已有文字上、还没松手。moved 一旦为真就按「拖动」处理,否则松手时进入编辑。
+  // cssAt 记的是按下时的 CSS 坐标,用来判「有没有位移」——判据必须是 CSS 像素而不是
+  // 取整后的位图坐标,见下面 mousemove 里的注释。
+  let textDown: { op: TextOp; at: Pt; cssAt: { x: number; y: number }; moved: boolean } | null = null;
 
   /** 把按钮条贴到选区右下角外侧;下方放不下就收进选区内部,免得按钮跑到视口外点不到。 */
   function placeActions(r: Rect): void {
@@ -350,6 +423,8 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
 
   /** 用户确认保存:把待定选区交给 copy,拷完拆除覆盖层。 */
   function commit(): void {
+    // 点保存时可能还在输入:先把那条文字定稿,否则它会被整个丢掉。
+    if (editor.isEditing()) editor.commit();
     if (!pending) return;
     // 重入守卫:拷贝进行中(committing === true)时,位图已经交出去了,live.bmp
     // 是 null。再次点保存(或者 Enter 又被触发一次)不该再跑一遍——第二次的
@@ -406,6 +481,49 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     size.textContent = `${r.w} × ${r.h}`;
   }
 
+  /**
+   * 把一次形状拖拽转成 op。拿不到位图(还没解码完)或者太小就返回 null,由调用方丢掉。
+   *
+   * 坐标在这里就换算成位图坐标——与 endDrag 落定时完全一致,渲染阶段不再考虑缩放。
+   *
+   * 注意:这里手工重复了 `Math.round(x * scale)`,而不是复用 `rect.ts` 的
+   * `toBitmapRect`——这是刻意的,不要「顺手」改成调用它。`toBitmapRect` 把
+   * left/top/right/bottom 各自夹到 `[0, bmpW] × [0, bmpH]`,那是**取景框**该有的
+   * 语义(裁剪参数必须落在图内)。标注矩形不是取景框:一个拖到视口左边缘外的框,
+   * 夹取后左边会被搬到 x = 0,原本看不见的那条竖边会凭空出现在选区里。不夹取
+   * 才是对的——越界部分交给裁剪画布天然裁掉,这正是「重新取景到更小范围时,
+   * 框外的标注被裁掉」这条已知限制想要的行为。
+   */
+  function shapeOpFrom(origin: { x: number; y: number }, toX: number, toY: number): Op | null {
+    const bmp = live?.bmp;
+    if (!bmp) return null;
+    const scale = bitmapScale(bmp.width, window.innerWidth);
+    if (tool === "rect") {
+      const css = normalizeRect(origin.x, origin.y, toX, toY);
+      if (isTooSmall(css)) return null; // 误点不该留下一个看不见的框
+      return {
+        kind: "rect",
+        id: nextOpId(),
+        r: {
+          x: Math.round(css.x * scale),
+          y: Math.round(css.y * scale),
+          w: Math.round(css.w * scale),
+          h: Math.round(css.h * scale),
+        },
+        color,
+        width: lineWidth(brush, scale),
+      };
+    }
+    if (tool === "arrow") {
+      const from = toBitmapPt(origin, scale);
+      const to = toBitmapPt({ x: toX, y: toY }, scale);
+      // 起终点重合画不出方向,当误点丢掉。
+      if (from.x === to.x && from.y === to.y) return null;
+      return { kind: "arrow", id: nextOpId(), from, to, color, width: lineWidth(brush, scale) };
+    }
+    return null;
+  }
+
   // 结束拖拽的公共逻辑:既被 surface 自身的 mouseup 调用,也被下面 window 级的
   // 兜底监听调用。「先判空、再置空 start、才使用它」保证两边都收到同一次松开时
   // 不会被处理两次——第二次进来 start 已经是 null,直接短路。
@@ -416,14 +534,40 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
       if (bmp) {
         // 收集的是 CSS 坐标,存进操作列表前立刻换算成位图坐标——之后渲染就不必再考虑缩放。
         const scale = bitmapScale(bmp.width, window.innerWidth);
-        const s: Stroke = {
+        const s: MosaicOp = {
+          kind: "mosaic",
+          id: nextOpId(),
           points: painting.map((p) => toBitmapPt(p, scale)),
           radius: brushRadius(brush, scale),
         };
-        ops = pushStroke(ops, s);
-        afterOpsChanged();
+        mutate(pushOp(ops, s));
       }
       painting = null;
+      return;
+    }
+    if (shapeStart) {
+      const op = shapeOpFrom(shapeStart, clientX, clientY);
+      shapeStart = null;
+      if (op) mutate(pushOp(ops, op));
+      else refreshPreview(); // 丢掉这一笔,把预览恢复成没有草稿的样子
+      return;
+    }
+    if (textDown) {
+      const down = textDown;
+      textDown = null;
+      // 与 mousedown 的守卫对齐:理论上不会发生(能走到这里,mousedown 时 bmp 已经
+      // 就绪),但防御性地保持一致,不裸调 scaleNow()。
+      const bmp = live?.bmp;
+      if (!bmp) return;
+      const p = toBitmapPt({ x: clientX, y: clientY }, bitmapScale(bmp.width, window.innerWidth));
+      if (down.moved) {
+        // 拖动:只挪位置,不进编辑。
+        const at = { x: down.op.at.x + (p.x - down.at.x), y: down.op.at.y + (p.y - down.at.y) };
+        mutate(replaceOp(ops, down.op.id, { ...down.op, at }));
+      } else {
+        // 原地松手 = 想改这条字。
+        beginText(down.op, down.op.id);
+      }
       return;
     }
     if (!start) return;
@@ -453,6 +597,34 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
       e.preventDefault();
       return;
     }
+    if ((tool === "rect" || tool === "arrow") && pending) {
+      shapeStart = { x: e.clientX, y: e.clientY };
+      e.preventDefault();
+      return;
+    }
+    if (tool === "text" && pending) {
+      e.preventDefault();
+      // 已经在编辑:这一下点击先把上一条定稿,再决定要不要开新的。
+      if (editor.isEditing()) editor.commit();
+      // 位图还没解码完:马赛克(endDrag 里的 bmp 判空)、矩形/箭头(shapeOpFrom 里的
+      // `if (!bmp) return null`)都显式挡了这种情形,文字路径必须对齐——否则
+      // scaleNow() 会静默退回 1,把 CSS 坐标当位图坐标存进 op,字号也不缩放,
+      // 解码落地后这条文字会跳到点击位置左上角、字号减半,而且是静默错误。
+      if (!live?.bmp) return;
+      const s = scaleNow();
+      const p = toBitmapPt({ x: e.clientX, y: e.clientY }, s);
+      const hit = hitTest(ops.list, p, measureText);
+      if (hit) {
+        // 按在已有文字上:现在还分不清是想拖动还是想改字,等松手看有没有位移。
+        textDown = { op: hit, at: p, cssAt: { x: e.clientX, y: e.clientY }, moved: false };
+        return;
+      }
+      beginText(
+        { kind: "text", id: nextOpId(), at: p, text: "", color, fontPx: fontSize(brush, s) },
+        null,
+      );
+      return;
+    }
     // 重新开拖 = 对上一个选区不满意。先把工具栏收起来,否则它会悬在半空挡着新选区。
     clearPending();
     start = { x: e.clientX, y: e.clientY };
@@ -478,11 +650,13 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
       // 就是要保存的东西」这条约定在拖拽过程中会被打破。换算方式和 endDrag 落定
       // 时完全一致,只是这里的结果只用于渲染,不写回 ops。
       const scale = bitmapScale(bmp.width, window.innerWidth);
-      const s: Stroke = {
+      const s: MosaicOp = {
+        kind: "mosaic",
+        id: nextOpId(),
         points: painting.map((p) => toBitmapPt(p, scale)),
         radius: brushRadius(brush, scale),
       };
-      refreshPreview(s);
+      refreshPreview({ op: s, replacesId: null });
     });
   }
 
@@ -490,6 +664,30 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
     if (painting) {
       painting.push({ x: e.clientX, y: e.clientY });
       schedulePaintPreview();
+      return;
+    }
+    if (shapeStart) {
+      const op = shapeOpFrom(shapeStart, e.clientX, e.clientY);
+      // 太小还画不出东西时传 undefined,预览就是干净的底图——比画一个瞬间闪现的
+      // 零尺寸框好。
+      refreshPreview(op ? { op, replacesId: null } : undefined);
+      return;
+    }
+    if (textDown) {
+      if (!textDown.moved) {
+        // 在 CSS 坐标上判位移,并给 3px 死区。高分屏上 scale ≈ 2,1 CSS 像素的手抖
+        // 取整到位图坐标就有 2 像素之差,零容差会把「手抖」误判成「想拖动」——
+        // 「文字可以点回去改」这个旗舰功能会在高分屏上间歇性失灵,且没有任何
+        // 视觉反馈:文字只是悄悄挪了两像素。
+        if (Math.abs(e.clientX - textDown.cssAt.x) < 3 && Math.abs(e.clientY - textDown.cssAt.y) < 3) return;
+        textDown.moved = true;
+      }
+      const p = toBitmapPt({ x: e.clientX, y: e.clientY }, scaleNow());
+      const at = {
+        x: textDown.op.at.x + (p.x - textDown.at.x),
+        y: textDown.op.at.y + (p.y - textDown.at.y),
+      };
+      refreshPreview({ op: { ...textDown.op, at }, replacesId: textDown.op.id });
       return;
     }
     if (!start) return;
@@ -517,6 +715,10 @@ export function showOverlay(dataUrl: string, copy: CopyFn): void {
   });
 
   const onKey = (e: KeyboardEvent) => {
+    // 正在输入文字:Esc/Enter/Ctrl+Z 都归那个 input,覆盖层不插手。编辑器自己会
+    // stopPropagation,但它绑在 input 上、这里绑在 document 捕获阶段——捕获先于
+    // 目标,所以必须在这里显式让位,否则 Enter 会顺带保存整张截图。
+    if (editor.isEditing()) return;
     if (e.key === "Escape") {
       e.stopPropagation();
       hideOverlay();
@@ -616,11 +818,11 @@ export async function copyRegion(bmp: ImageBitmap, r: Rect, ops: Ops): Promise<v
     const scale = bitmapScale(bmp.width, window.innerWidth);
     const b = toBitmapRect(r, scale, bmp.width, bmp.height);
     if (b.w === 0 || b.h === 0) return; // 选区完全落在图外,当取消,不提示
-    // 没有笔迹是最常见的情形(框完选区直接保存,没碰马赛克工具)。renderAnnotated
-    // 在 ops 为空时根本不看 pix 参数就提前返回,但 pixelateCrop 本身要分配两张
+    // 没有马赛克是最常见的情形(框完选区直接保存,没碰马赛克工具)。renderAnnotated
+    // 在列表里没有 mosaic 时根本不看 pix 参数,但 pixelateCrop 本身要分配两张
     // 裁剪尺寸的画布并做一次缩小再放大——4K 截图上这是几十 MB 的白费功夫。
-    // 只在真有笔迹时才算它,空画布当占位符,反正用不上。
-    const pix = isEmpty(ops) ? document.createElement("canvas") : pixelateCrop(bmp, b);
+    // 只在真有马赛克时才算它,空画布当占位符,反正用不上。
+    const pix = hasMosaic(ops.list) ? pixelateCrop(bmp, b) : document.createElement("canvas");
     const canvas = renderAnnotated(bmp, b, ops, pix);
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
     if (!blob) throw new Error("toBlob returned null");

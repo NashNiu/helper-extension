@@ -1,46 +1,91 @@
 import { describe, expect, it } from "vitest";
 import {
   emptyOps,
-  isEmpty,
-  pushStroke,
-  undo,
+  pushOp,
+  replaceOp,
+  effectiveList,
+  hasMosaic,
+  nextOpId,
   bitmapScale,
   toBitmapPt,
   brushRadius,
-  blockSizeFor,
   BRUSH_CSS_RADIUS,
   DEFAULT_BRUSH,
-  type Stroke,
+  canUndo,
+  emptyHistory,
+  record,
+  rewind,
+  OP_COLORS,
+  DEFAULT_COLOR,
+  LINE_CSS_WIDTH,
+  FONT_CSS_SIZE,
+  lineWidth,
+  fontSize,
+  arrowHead,
+  fontString,
+  hitTest,
+  textBox,
+  type Op,
+  type Ops,
+  type Measure,
+  type TextOp,
 } from "./annotate";
 
-const stroke = (n: number): Stroke => ({ points: [{ x: n, y: n }], radius: 10 });
+const M = (id: string): Op => ({ kind: "mosaic", id, points: [{ x: 1, y: 1 }], radius: 3 });
+const R = (id: string): Op => ({ kind: "rect", id, r: { x: 0, y: 0, w: 10, h: 10 }, color: "red", width: 2 });
+const T = (id: string, text: string): Op => ({ kind: "text", id, at: { x: 5, y: 5 }, text, color: "blue", fontPx: 20 });
 
 describe("操作列表", () => {
   it("新建的操作列表是空的", () => {
-    expect(isEmpty(emptyOps())).toBe(true);
-    expect(emptyOps().mosaics).toEqual([]);
+    expect(emptyOps().list).toEqual([]);
   });
 
-  it("追加笔迹后不再为空，且按追加顺序排列", () => {
-    const ops = pushStroke(pushStroke(emptyOps(), stroke(1)), stroke(2));
-    expect(isEmpty(ops)).toBe(false);
-    expect(ops.mosaics.map((s) => s.points[0].x)).toEqual([1, 2]);
+  it("pushOp 按顺序追加，且不修改原对象——渲染靠重放，就地改会让快照失去参照", () => {
+    const a = emptyOps();
+    const b = pushOp(a, M("op-1"));
+    const c = pushOp(b, R("op-2"));
+    expect(a.list).toEqual([]);
+    expect(c.list.map((o) => o.id)).toEqual(["op-1", "op-2"]);
   });
 
-  it("追加不修改原对象——渲染要靠重放，就地改会让撤销失去参照", () => {
-    const before = emptyOps();
-    pushStroke(before, stroke(1));
-    expect(before.mosaics).toEqual([]);
+  it("replaceOp 就地替换，位置不变——改完的文字必须留在原来的层叠位置", () => {
+    const ops = { list: [M("op-1"), T("op-2", "旧"), R("op-3")] };
+    const next = replaceOp(ops, "op-2", T("op-2", "新"));
+    expect(next.list.map((o) => o.id)).toEqual(["op-1", "op-2", "op-3"]);
+    expect((next.list[1] as { text: string }).text).toBe("新");
   });
 
-  it("撤销只去掉最后一条，更早的原样保留", () => {
-    const ops = pushStroke(pushStroke(pushStroke(emptyOps(), stroke(1)), stroke(2)), stroke(3));
-    expect(undo(ops).mosaics.map((s) => s.points[0].x)).toEqual([1, 2]);
+  it("replaceOp 传 null 表示删除该项", () => {
+    const ops = { list: [M("op-1"), T("op-2", "x")] };
+    expect(replaceOp(ops, "op-2", null).list.map((o) => o.id)).toEqual(["op-1"]);
   });
 
-  it("空列表上撤销不报错，仍是空", () => {
-    expect(() => undo(emptyOps())).not.toThrow();
-    expect(isEmpty(undo(emptyOps()))).toBe(true);
+  it("effectiveList 没有草稿时原样返回", () => {
+    const ops = { list: [M("op-1")] };
+    expect(effectiveList(ops)).toEqual(ops.list);
+  });
+
+  it("effectiveList 的 replacesId 为 null 时把草稿追加在末尾", () => {
+    const ops = { list: [M("op-1")] };
+    const got = effectiveList(ops, { op: R("op-9"), replacesId: null });
+    expect(got.map((o) => o.id)).toEqual(["op-1", "op-9"]);
+  });
+
+  it("effectiveList 的 replacesId 命中时就地替换，不移到末尾——否则编辑中的文字会跳到最上层", () => {
+    const ops = { list: [T("op-1", "甲"), R("op-2")] };
+    const got = effectiveList(ops, { op: T("op-1", "乙"), replacesId: "op-1" });
+    expect(got.map((o) => o.id)).toEqual(["op-1", "op-2"]);
+    expect((got[0] as { text: string }).text).toBe("乙");
+  });
+
+  it("hasMosaic 只认 mosaic 类型——三个箭头不该触发像素化", () => {
+    expect(hasMosaic([R("op-1"), T("op-2", "x")])).toBe(false);
+    expect(hasMosaic([R("op-1"), M("op-2")])).toBe(true);
+    expect(hasMosaic([])).toBe(false);
+  });
+
+  it("nextOpId 连续调用不重复", () => {
+    expect(nextOpId()).not.toBe(nextOpId());
   });
 });
 
@@ -91,16 +136,174 @@ describe("brushRadius", () => {
   });
 });
 
-describe("blockSizeFor", () => {
-  it("随位图宽度变大", () => {
-    expect(blockSizeFor(2400)).toBeGreaterThan(blockSizeFor(1200));
+describe("撤销快照栈", () => {
+  it("新建的历史不能撤销", () => {
+    expect(canUndo(emptyHistory())).toBe(false);
+    expect(rewind(emptyHistory())).toBeNull();
   });
 
-  it("窄图上也不小于 6——块太小就失去遮挡意义", () => {
-    expect(blockSizeFor(100)).toBe(6);
+  it("撤销一次追加，回到追加之前", () => {
+    const a: Ops = { list: [M("op-1")] };
+    const h = record(emptyHistory(), a);
+    const back = rewind(h);
+    expect(back!.ops.list.map((o) => o.id)).toEqual(["op-1"]);
+    expect(canUndo(back!.history)).toBe(false);
   });
 
-  it("1920 宽给出 16", () => {
-    expect(blockSizeFor(1920)).toBe(16);
+  it("撤销一次「修改」恢复的是旧内容，而不是把那条整个删掉——这正是 slice(0,-1) 做不到的", () => {
+    const before: Ops = { list: [T("op-1", "旧")] };
+    const after = replaceOp(before, "op-1", T("op-1", "新"));
+    const h = record(emptyHistory(), before);
+
+    const back = rewind(h)!;
+
+    expect(back.ops.list).toHaveLength(1);
+    expect((back.ops.list[0] as { text: string }).text).toBe("旧");
+    // 对照:旧实现会得到一个空列表
+    expect(after.list).toHaveLength(1);
+  });
+
+  it("撤销一次「删除」把那条放回来", () => {
+    const before: Ops = { list: [M("op-1"), T("op-2", "x")] };
+    const h = record(emptyHistory(), before);
+    expect(rewind(h)!.ops.list.map((o) => o.id)).toEqual(["op-1", "op-2"]);
+  });
+
+  it("连续撤销按后进先出逐步回退", () => {
+    let h = emptyHistory();
+    const s0: Ops = { list: [] };
+    const s1: Ops = { list: [M("op-1")] };
+    h = record(h, s0);
+    h = record(h, s1);
+    const first = rewind(h)!;
+    expect(first.ops.list.map((o) => o.id)).toEqual(["op-1"]);
+    const second = rewind(first.history)!;
+    expect(second.ops.list).toEqual([]);
+    expect(canUndo(second.history)).toBe(false);
+  });
+
+  it("record 不修改传入的历史", () => {
+    const h = emptyHistory();
+    record(h, { list: [M("op-1")] });
+    expect(canUndo(h)).toBe(false);
   });
 });
+
+describe("线宽与字号", () => {
+  it("三档线宽钉死在约定数值上——只校验递增,一个打错的常量也能蒙混过关", () => {
+    expect(LINE_CSS_WIDTH).toEqual({ small: 2, medium: 4, large: 7 });
+  });
+
+  it("三档字号钉死在约定数值上", () => {
+    expect(FONT_CSS_SIZE).toEqual({ small: 14, medium: 20, large: 30 });
+  });
+
+  it("四个颜色值钉死", () => {
+    expect(OP_COLORS).toEqual({ red: "#f5222d", yellow: "#fadb14", green: "#52c41a", blue: "#1677ff" });
+  });
+
+  it("默认色是红", () => {
+    expect(DEFAULT_COLOR).toBe("red");
+  });
+
+  it("线宽按比例换算到位图尺度", () => {
+    expect(lineWidth("medium", 2)).toBe(8);
+  });
+
+  it("线宽再小也至少 1 像素——0 宽的线画不出任何东西", () => {
+    expect(lineWidth("small", 0.1)).toBe(1);
+  });
+
+  it("字号按比例换算到位图尺度", () => {
+    expect(fontSize("large", 2)).toBe(60);
+  });
+
+  it("字号再小也至少 1 像素", () => {
+    expect(fontSize("small", 0.01)).toBe(1);
+  });
+});
+
+describe("arrowHead", () => {
+  it("水平向右的箭头，三角形的尖端就是终点", () => {
+    const head = arrowHead({ x: 0, y: 0 }, { x: 100, y: 0 }, 4)!;
+    expect(head[0]).toEqual({ x: 100, y: 0 });
+  });
+
+  it("两翼对称地分居轴线两侧", () => {
+    const [, a, b] = arrowHead({ x: 0, y: 0 }, { x: 100, y: 0 }, 4)!;
+    expect(a.x).toBeCloseTo(b.x, 6);
+    expect(a.y).toBeCloseTo(-b.y, 6);
+  });
+
+  it("两翼落在终点后方——箭头要指向终点，不能越过它", () => {
+    const [, a, b] = arrowHead({ x: 0, y: 0 }, { x: 100, y: 0 }, 4)!;
+    expect(a.x).toBeLessThan(100);
+    expect(b.x).toBeLessThan(100);
+  });
+
+  it("头长随线宽变大——细线配大箭头会很怪", () => {
+    const thin = arrowHead({ x: 0, y: 0 }, { x: 100, y: 0 }, 2)!;
+    const thick = arrowHead({ x: 0, y: 0 }, { x: 100, y: 0 }, 8)!;
+    expect(100 - thick[1].x).toBeGreaterThan(100 - thin[1].x);
+  });
+
+  it("竖直向下也对称，不是只有水平才算对——旋转变换写错时这条会挂", () => {
+    const [tip, a, b] = arrowHead({ x: 0, y: 0 }, { x: 0, y: 100 }, 4)!;
+    expect(tip).toEqual({ x: 0, y: 100 });
+    expect(a.y).toBeCloseTo(b.y, 6);
+    expect(a.x).toBeCloseTo(-b.x, 6);
+  });
+
+  it("起终点重合时返回 null——零长度算不出方向", () => {
+    expect(arrowHead({ x: 5, y: 5 }, { x: 5, y: 5 }, 4)).toBeNull();
+  });
+});
+
+describe("文字度量与命中判定", () => {
+  /** 确定性假度量:每个字符 10 像素宽,与字号无关,方便手算期望值。 */
+  const measure: Measure = (t) => t.length * 10;
+  const TX = (id: string, x: number, y: number, text: string): TextOp => ({
+    kind: "text", id, at: { x, y }, text, color: "red", fontPx: 20,
+  });
+
+  it("fontString 把字号嵌进同一个字体串——度量和绘制必须用同一个串", () => {
+    expect(fontString(20)).toContain("20px");
+    expect(fontString(20)).toBe(fontString(20));
+  });
+
+  it("文字盒宽度来自度量，高度是字号的 1.25 倍", () => {
+    expect(textBox(TX("op-1", 5, 7, "abc"), measure)).toEqual({ x: 5, y: 7, w: 30, h: 25 });
+  });
+
+  it("空文字的盒子宽度为 0——刚点出光标还没打字时不该占地方", () => {
+    expect(textBox(TX("op-1", 0, 0, ""), measure).w).toBe(0);
+  });
+
+  it("点在文字正中命中它", () => {
+    expect(hitTest([TX("op-1", 100, 100, "abc")], { x: 110, y: 110 }, measure)?.id).toBe("op-1");
+  });
+
+  it("点在远处不命中", () => {
+    expect(hitTest([TX("op-1", 100, 100, "abc")], { x: 500, y: 500 }, measure)).toBeNull();
+  });
+
+  it("命中范围四周放宽，细字才点得中——正好贴着盒子外沿也算", () => {
+    // fontPx=20 → 放宽 max(4, 5) = 5
+    expect(hitTest([TX("op-1", 100, 100, "abc")], { x: 96, y: 98 }, measure)?.id).toBe("op-1");
+    expect(hitTest([TX("op-1", 100, 100, "abc")], { x: 90, y: 98 }, measure)).toBeNull();
+  });
+
+  it("重叠时取列表里靠后的那条——后画的在上面，点中的应该是看得见的那条", () => {
+    const list = [TX("op-1", 100, 100, "abc"), TX("op-2", 100, 100, "xyz")];
+    expect(hitTest(list, { x: 110, y: 110 }, measure)?.id).toBe("op-2");
+  });
+
+  it("只认文字，矩形和箭头挡在上面也不算命中", () => {
+    const list: Op[] = [
+      { kind: "rect", id: "op-9", r: { x: 0, y: 0, w: 999, h: 999 }, color: "red", width: 2 },
+      TX("op-1", 100, 100, "abc"),
+    ];
+    expect(hitTest(list, { x: 110, y: 110 }, measure)?.id).toBe("op-1");
+  });
+});
+
