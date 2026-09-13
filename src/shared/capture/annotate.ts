@@ -5,18 +5,102 @@ export interface Pt {
   y: number;
 }
 
-/** 一次涂抹。points 与 radius 都已经是位图坐标/尺度,渲染时不再换算。 */
-export interface Stroke {
-  points: Pt[];
-  radius: number;
+export type OpColor = "red" | "yellow" | "green" | "blue";
+
+export interface MosaicOp { kind: "mosaic"; id: string; points: Pt[]; radius: number }
+export interface RectOp { kind: "rect"; id: string; r: Rect; color: OpColor; width: number }
+export interface ArrowOp { kind: "arrow"; id: string; from: Pt; to: Pt; color: OpColor; width: number }
+export interface TextOp { kind: "text"; id: string; at: Pt; text: string; color: OpColor; fontPx: number }
+export type Op = MosaicOp | RectOp | ArrowOp | TextOp;
+
+export interface Ops { list: Op[] }
+
+/**
+ * 正在进行中、还没落进 ops 的那一个操作。拖拽中的马赛克/矩形/箭头,以及正在
+ * 输入的文字,都是同一个概念——渲染时并进列表,松手或定稿时才真正写入 ops。
+ *
+ * replacesId 为 null 表示这是个新建;非 null 表示它在就地改写列表里的同 id 项,
+ * 这是文字二次编辑不打乱层叠顺序的原因。
+ *
+ * caret 只在文字编辑时有值,表示光标在第几个字符之前。它由 Task 9 的绘制代码
+ * 消费,不入最终图像。
+ */
+export interface Draft { op: Op; replacesId: string | null; caret?: number }
+
+// 自增计数器而不是 crypto.randomUUID():后者是 [SecureContext] 接口,内容脚本
+// 跑在 http:// 页面上时它根本不存在,调用会直接抛。id 只需在一次覆盖层会话内唯一。
+let idSeq = 0;
+export function nextOpId(): string {
+  return `op-${++idSeq}`;
+}
+
+export function emptyOps(): Ops {
+  return { list: [] };
+}
+
+export function pushOp(ops: Ops, op: Op): Ops {
+  return { list: [...ops.list, op] };
+}
+
+/** op 传 null 表示删除该项。找不到 id 时原样返回。 */
+export function replaceOp(ops: Ops, id: string, op: Op | null): Ops {
+  const out: Op[] = [];
+  for (const o of ops.list) {
+    if (o.id !== id) {
+      out.push(o);
+      continue;
+    }
+    if (op) out.push(op);
+  }
+  return { list: out };
+}
+
+/** 把草稿并进列表,得到本次要渲染的有效列表。 */
+export function effectiveList(ops: Ops, draft?: Draft): Op[] {
+  if (!draft) return ops.list;
+  if (draft.replacesId === null) return [...ops.list, draft.op];
+  return ops.list.map((o) => (o.id === draft.replacesId ? draft.op : o));
 }
 
 /**
- * 标注操作。刻意按类型分组而不是一个有序数组:这次只有马赛克一种,分组更直白;
- * 以后加矩形/文字时若真需要严格的绘制先后顺序,再换成有序数组也只影响渲染函数内部。
+ * 列表里有没有马赛克。这是要不要算 pixelateCrop 的闸门。
+ *
+ * 收的是 Op[] 而不是 Ops,调用方必须传 effectiveList(ops, draft)——正在拖拽的
+ * 那一笔马赛克还在草稿里,只看 ops 会让预览直到松手才出现马赛克。
  */
-export interface Ops {
-  mosaics: Stroke[];
+export function hasMosaic(list: Op[]): boolean {
+  return list.some((o) => o.kind === "mosaic");
+}
+
+/**
+ * 撤销历史。存的是每次变更**之前**的整份操作列表快照。
+ *
+ * 不用「弹掉最后一个 op」:文字可以二次编辑,变更不再只有追加,还有修改和删除。
+ * 对「刚把一段文字改错了」,弹掉最后一项会把那条文字整个删掉,而正确结果是恢复
+ * 上一版内容。op 对象都很小,快照的内存代价可以忽略。
+ */
+export interface History {
+  past: Ops[];
+}
+
+export function emptyHistory(): History {
+  return { past: [] };
+}
+
+export function canUndo(h: History): boolean {
+  return h.past.length > 0;
+}
+
+/** 在变更之前调用,把当前这份存起来。返回新历史,不修改传入的那份。 */
+export function record(h: History, before: Ops): History {
+  return { past: [...h.past, before] };
+}
+
+/** 回退一步。历史为空时返回 null,由调用方当作无操作。 */
+export function rewind(h: History): { history: History; ops: Ops } | null {
+  const ops = h.past[h.past.length - 1];
+  if (!ops) return null;
+  return { history: { past: h.past.slice(0, -1) }, ops };
 }
 
 export type BrushSize = "small" | "medium" | "large";
@@ -24,27 +108,6 @@ export type BrushSize = "small" | "medium" | "large";
 /** 笔刷半径(CSS 像素)。三档差距要拉开——遮一行小字和遮半张图不是一个量级。 */
 export const BRUSH_CSS_RADIUS: Record<BrushSize, number> = { small: 8, medium: 16, large: 28 };
 export const DEFAULT_BRUSH: BrushSize = "medium";
-
-export function emptyOps(): Ops {
-  return { mosaics: [] };
-}
-
-export function isEmpty(ops: Ops): boolean {
-  return ops.mosaics.length === 0;
-}
-
-/**
- * 追加与撤销都返回新对象,不就地修改。渲染是「从空白重放整个列表」,
- * 就地改会让调用方分不清手上这份是改之前还是改之后的。
- */
-export function pushStroke(ops: Ops, s: Stroke): Ops {
-  return { ...ops, mosaics: [...ops.mosaics, s] };
-}
-
-export function undo(ops: Ops): Ops {
-  // slice(0, -1) 在空数组上返回空数组,所以不需要额外判空。
-  return { ...ops, mosaics: ops.mosaics.slice(0, -1) };
-}
 
 /**
  * 位图像素 / CSS 像素。全项目只此一处实现:copyRegion 裁剪要用它,笔迹收集也要用它,
@@ -65,84 +128,101 @@ export function brushRadius(size: BrushSize, scale: number): number {
   return Math.max(1, Math.round(BRUSH_CSS_RADIUS[size] * scale));
 }
 
-/** 马赛克块边长。随位图宽度自适应——写死常数在高分屏上会小到看不出遮挡。 */
-export function blockSizeFor(bmpWidth: number): number {
-  return Math.max(6, Math.round(bmpWidth / 120));
+/** 标注配色。四档足够在大多数截图上找到一个显眼的,又不至于撑爆工具栏。 */
+export const OP_COLORS: Record<OpColor, string> = {
+  red: "#f5222d",
+  yellow: "#fadb14",
+  green: "#52c41a",
+  blue: "#1677ff",
+};
+export const DEFAULT_COLOR: OpColor = "red";
+
+/** 线宽(CSS 像素)。与马赛克笔刷共用同一组三档按钮。 */
+export const LINE_CSS_WIDTH: Record<BrushSize, number> = { small: 2, medium: 4, large: 7 };
+/** 字号(CSS 像素)。 */
+export const FONT_CSS_SIZE: Record<BrushSize, number> = { small: 14, medium: 20, large: 30 };
+
+export function lineWidth(size: BrushSize, scale: number): number {
+  // 至少 1:0 宽的线画出来什么都没有,用户会以为功能坏了。
+  return Math.max(1, Math.round(LINE_CSS_WIDTH[size] * scale));
 }
 
-function make2d(w: number, h: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("2d context unavailable");
-  return { canvas, ctx };
+export function fontSize(size: BrushSize, scale: number): number {
+  return Math.max(1, Math.round(FONT_CSS_SIZE[size] * scale));
+}
+
+/** 箭头头部的半角(弧度)。25° 是一个既显眼又不至于臃肿的开口。 */
+const ARROW_HALF_ANGLE = (25 * Math.PI) / 180;
+
+/**
+ * 算出箭头三角形的三个顶点:[尖端, 翼一, 翼二]。尖端就是终点。
+ *
+ * 单独拎成纯函数而不是写在绘制里,是因为它是这个工具唯一有实质计算的部分,
+ * 而绘制本身在 happy-dom 里无法断言——分开才测得到。
+ *
+ * 起终点重合时返回 null:零长度算不出方向,调用方应当整支箭头都不画。
+ */
+export function arrowHead(from: Pt, to: Pt, width: number): [Pt, Pt, Pt] | null {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.hypot(dx, dy);
+  if (len === 0) return null;
+  // 头长随线宽走:细线配大箭头会很怪。
+  const headLen = 4 * width;
+  // 从终点朝起点方向回退,再左右各转开半角。
+  const angle = Math.atan2(dy, dx);
+  const wing = (sign: number): Pt => ({
+    x: to.x - headLen * Math.cos(angle + sign * ARROW_HALF_ANGLE),
+    y: to.y - headLen * Math.sin(angle + sign * ARROW_HALF_ANGLE),
+  });
+  return [{ x: to.x, y: to.y }, wing(1), wing(-1)];
 }
 
 /**
- * 把整块裁剪区域像素化成一张画布。
+ * 文字的字体串。**度量与绘制必须用同一个串**,两处各拼一遍迟早会漂移,
+ * 那会让命中范围和看到的文字对不上。
  *
- * 只依赖底图与裁剪矩形,不依赖笔迹——所以调用方可以按选区缓存它,涂抹过程中
- * 只重画蒙版,不必每次 mousemove 都重算这一步(大选区上那会很卡)。
+ * 加粗是因为标注文字常常压在花哨的背景上,细体几乎读不出来。
  */
-export function pixelateCrop(bmp: ImageBitmap, crop: Rect): HTMLCanvasElement {
-  const block = blockSizeFor(bmp.width);
-  const sw = Math.max(1, Math.round(crop.w / block));
-  const sh = Math.max(1, Math.round(crop.h / block));
+export function fontString(fontPx: number): string {
+  return `bold ${fontPx}px -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif`;
+}
 
-  const small = make2d(sw, sh);
-  small.ctx.drawImage(bmp, crop.x, crop.y, crop.w, crop.h, 0, 0, sw, sh);
+/** 文字宽度的度量。由调用方注入:生产环境包一层 measureText,测试注入确定性实现。 */
+export type Measure = (text: string, fontPx: number) => number;
 
-  const out = make2d(crop.w, crop.h);
-  // 关掉平滑才是马赛克。开着平滑放大回去得到的是模糊,而模糊在很多场景下是可还原的。
-  out.ctx.imageSmoothingEnabled = false;
-  out.ctx.drawImage(small.canvas, 0, 0, sw, sh, 0, 0, crop.w, crop.h);
-  return out.canvas;
+/** 行高系数。1.25 是常见的正文行高,够容纳中文的上下伸展。 */
+const LINE_HEIGHT = 1.25;
+
+export function textBox(op: TextOp, measure: Measure): Rect {
+  return {
+    x: op.at.x,
+    y: op.at.y,
+    w: measure(op.text, op.fontPx),
+    h: Math.round(op.fontPx * LINE_HEIGHT),
+  };
 }
 
 /**
- * 底图裁剪 + 按笔迹蒙版贴上马赛克。
+ * 找出点在哪条文字上。没有就返回 null。
  *
- * **预览与最终输出必须都调用这一个函数。** 另做一套「近似的」预览画法,是这类工具
- * 最常见的缺陷来源——用户看到的和存下来的对不上。
- *
- * pix 由调用方传入(见 pixelateCrop 的缓存说明)。
+ * 从后往前找:列表靠后的后画、盖在上面,用户点中的应该是看得见的那条。
  */
-export function renderAnnotated(bmp: ImageBitmap, crop: Rect, ops: Ops, pix: HTMLCanvasElement): HTMLCanvasElement {
-  const out = make2d(crop.w, crop.h);
-  out.ctx.drawImage(bmp, crop.x, crop.y, crop.w, crop.h, 0, 0, crop.w, crop.h);
-  if (ops.mosaics.length === 0) return out.canvas;
-
-  // 蒙版:笔迹画成白色圆头粗线。笔迹是位图坐标,画进裁剪局部坐标要减去裁剪原点。
-  const mask = make2d(crop.w, crop.h);
-  mask.ctx.strokeStyle = "#fff";
-  mask.ctx.fillStyle = "#fff";
-  mask.ctx.lineCap = "round";
-  mask.ctx.lineJoin = "round";
-  for (const s of ops.mosaics) {
-    const first = s.points[0];
-    if (!first) continue;
-    mask.ctx.beginPath();
-    if (s.points.length === 1) {
-      // 只点一下没拖:lineTo 画不出任何东西,得用一个圆点代替,否则点击等于白点。
-      mask.ctx.arc(first.x - crop.x, first.y - crop.y, s.radius, 0, Math.PI * 2);
-      mask.ctx.fill();
-      continue;
+export function hitTest(list: Op[], p: Pt, measure: Measure): TextOp | null {
+  for (let i = list.length - 1; i >= 0; i--) {
+    const op = list[i];
+    if (op.kind !== "text") continue;
+    const box = textBox(op, measure);
+    // 四周放宽,否则又细又矮的文字几乎点不中。
+    const pad = Math.max(4, Math.round(op.fontPx * 0.25));
+    if (
+      p.x >= box.x - pad &&
+      p.x <= box.x + box.w + pad &&
+      p.y >= box.y - pad &&
+      p.y <= box.y + box.h + pad
+    ) {
+      return op;
     }
-    mask.ctx.lineWidth = s.radius * 2;
-    mask.ctx.moveTo(first.x - crop.x, first.y - crop.y);
-    for (let i = 1; i < s.points.length; i++) {
-      mask.ctx.lineTo(s.points[i].x - crop.x, s.points[i].y - crop.y);
-    }
-    mask.ctx.stroke();
   }
-
-  // 只保留笔迹覆盖到的那部分马赛克,再叠回原图。
-  const masked = make2d(crop.w, crop.h);
-  masked.ctx.drawImage(pix, 0, 0);
-  masked.ctx.globalCompositeOperation = "destination-in";
-  masked.ctx.drawImage(mask.canvas, 0, 0);
-
-  out.ctx.drawImage(masked.canvas, 0, 0);
-  return out.canvas;
+  return null;
 }

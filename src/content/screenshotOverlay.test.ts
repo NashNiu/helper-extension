@@ -11,7 +11,7 @@ vi.mock("../shared/locale", () => ({
 }));
 
 import { showOverlay, hideOverlay, showToast, copyRegion, OVERLAY_ID, TOAST_ID } from "./screenshotOverlay";
-import { emptyOps, type Ops } from "../shared/capture/annotate";
+import { emptyOps, type MosaicOp, type Ops, type Pt } from "../shared/capture/annotate";
 import type { Rect } from "../shared/capture/rect";
 import { translate } from "../i18n/core";
 
@@ -66,6 +66,20 @@ function clickUndo() {
   host()!
     .shadowRoot!.querySelector<HTMLElement>("[data-undo]")!
     .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+}
+
+/** 先框好选区,切到指定工具,再在选区内拖一次,最后点保存。返回交给 copy 的操作列表。 */
+async function drawThenSave(tool: string, from: [number, number], to: [number, number]): Promise<Ops> {
+  const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+  showOverlay(DATA_URL, copy);
+  await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码——后面的形状拖拽要用到位图
+  drag([10, 10], [400, 300]);
+  (host()!.shadowRoot!.querySelector(`[data-tool="${tool}"]`) as HTMLButtonElement).click();
+  drag(from, to);
+  (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+  await Promise.resolve();
+  await Promise.resolve();
+  return copy.mock.calls[0][2] as Ops;
 }
 
 async function paintOne(copy: ReturnType<typeof vi.fn>) {
@@ -145,7 +159,7 @@ describe("screenshotOverlay", () => {
     // commit() 里的 bmpReady.then(...) 即使 bmpReady 早已 resolve,回调也总是排到
     // 微任务队列里,不会跟 clickSave() 同步执行——断言前得再放一轮微任务过去。
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { mosaics: [] });
+    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { list: [] });
   });
 
   it("保存时把解码后的位图和操作列表交给 copy——不再传 dataUrl", async () => {
@@ -155,7 +169,7 @@ describe("screenshotOverlay", () => {
     drag([100, 200], [50, 80]);
     clickSave();
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
-    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { mosaics: [] });
+    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { list: [] });
   });
 
   it("覆盖层拆除时释放位图——位图现在归覆盖层持有，不释放就是泄漏", async () => {
@@ -185,7 +199,7 @@ describe("screenshotOverlay", () => {
     clickSave();
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
     expect(copy).toHaveBeenCalledTimes(1);
-    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 10, y: 10, w: 20, h: 30 }, { mosaics: [] });
+    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 10, y: 10, w: 20, h: 30 }, { list: [] });
   });
 
   it("重新开始拖拽时按钮先收起来，免得它悬在半空挡着新选区", async () => {
@@ -211,7 +225,7 @@ describe("screenshotOverlay", () => {
       .dispatchEvent(new MouseEvent("mousedown", { clientX: 105, clientY: 205, button: 0, bubbles: true }));
     clickSave();
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
-    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { mosaics: [] });
+    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { list: [] });
   });
 
   it("待确认时按 Enter 等同于点保存", async () => {
@@ -221,7 +235,7 @@ describe("screenshotOverlay", () => {
     drag([100, 200], [50, 80]);
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
-    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { mosaics: [] });
+    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { list: [] });
   });
 
   it("还没框选时按 Enter 什么也不做", () => {
@@ -392,7 +406,7 @@ describe("screenshotOverlay", () => {
     clickSave();
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
     expect(copy).toHaveBeenCalledTimes(1);
-    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { mosaics: [] });
+    expect(copy).toHaveBeenCalledWith(FAKE_BMP, { x: 50, y: 80, w: 50, h: 120 }, { list: [] });
   });
 
   it("保存进行中被拆除覆盖层不能提前关闭位图——位图归 commit 所有，copy 结束才关且只关一次", async () => {
@@ -414,7 +428,7 @@ describe("screenshotOverlay", () => {
     drag([100, 200], [50, 80]);
     clickSave();
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 把位图交给 copy
-    expect(copy).toHaveBeenCalledWith(localBmp, { x: 50, y: 80, w: 50, h: 120 }, { mosaics: [] });
+    expect(copy).toHaveBeenCalledWith(localBmp, { x: 50, y: 80, w: 50, h: 120 }, { list: [] });
 
     // copy 还没 settle 时拆除覆盖层(用户按 Esc,或立刻又触发一次截图):这不该
     // 关掉 copy 正在用的这份位图,否则它内部的 renderAnnotated 会因为位图已经
@@ -443,7 +457,7 @@ describe("screenshotOverlay", () => {
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
     const [, rect, ops] = copy.mock.calls[0];
     expect(rect).toEqual({ x: 50, y: 80, w: 50, h: 120 }); // 选区没被改
-    expect(ops.mosaics).toHaveLength(1); // 多了一条笔迹
+    expect(ops.list).toHaveLength(1); // 多了一条操作
   });
 
   it("涂抹的笔迹存的是位图坐标,不是屏幕坐标", async () => {
@@ -457,7 +471,7 @@ describe("screenshotOverlay", () => {
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
     const ops = copy.mock.calls[0][2];
     // FAKE_BMP 宽 2000,happy-dom 视口宽 1024 → scale 约 1.95,位图坐标必然大于屏幕坐标
-    expect(ops.mosaics[0].points[0].x).toBeGreaterThan(60);
+    expect((ops.list[0] as MosaicOp).points[0].x).toBeGreaterThan(60);
   });
 
   it("切回选区工具后拖动又能重新框选", async () => {
@@ -484,7 +498,7 @@ describe("screenshotOverlay", () => {
     drag([10, 10], [40, 50]);
     clickSave();
     await new Promise((resolve) => setTimeout(resolve, 0)); // 等 commit() 里的 bmpReady.then(...) 回调跑完
-    expect(copy.mock.calls[0][2].mosaics).toHaveLength(1);
+    expect(copy.mock.calls[0][2].list).toHaveLength(1);
   });
 
   it("框出选区后（不必等切到马赛克工具）就挂上按位图分辨率开的预览画布", async () => {
@@ -535,7 +549,7 @@ describe("screenshotOverlay", () => {
     // 同上面其它保存路径的用例:commit() 里的 bmpReady.then(...) 总是排到微任务
     // 队列里,不会跟 clickSave() 同步执行——断言前得再放一轮微任务过去。
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(copy.mock.calls[0][2].mosaics).toHaveLength(1);
+    expect(copy.mock.calls[0][2].list).toHaveLength(1);
   });
 
   it("Ctrl+Z 与点撤销等价", async () => {
@@ -547,7 +561,7 @@ describe("screenshotOverlay", () => {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Z", ctrlKey: true, shiftKey: true, bubbles: true }));
     clickSave();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(copy.mock.calls[0][2].mosaics).toHaveLength(0);
+    expect(copy.mock.calls[0][2].list).toHaveLength(0);
   });
 
   it("撤销按钮在没有笔迹时禁用，涂一笔后可用", async () => {
@@ -563,15 +577,106 @@ describe("screenshotOverlay", () => {
   });
 
   it("撤销到空之后再撤销、再按 Ctrl+Z：不抛错，覆盖层不消失", async () => {
-    // 注意这个名字刻意没提 isEmpty 守卫:undo() 对空数组 slice(0,-1) 本来就还是
-    // 空数组，就算 doUndo() 里去掉 isEmpty 判断，这里断言的「不抛错」照样成立——
-    // 这个用例锁定的只是「重复撤销不炸」这个可观察行为，不是守卫本身的必要性。
+    // 注意这个名字刻意没提「空列表」守卫:slice(0,-1) 在空数组上本来就还是
+    // 空数组，就算 doUndo() 里去掉 ops.list.length === 0 的判断，这里断言的
+    // 「不抛错」照样成立——这个用例锁定的只是「重复撤销不炸」这个可观察行为，
+    // 不是守卫本身的必要性。
     const copy = vi.fn(async () => {});
     await paintOne(copy);
     clickUndo();
     expect(() => clickUndo()).not.toThrow();
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
     expect(host()).not.toBeNull();
+  });
+});
+
+describe("矩形框工具", () => {
+  it("拖一次生成一个 rect op，带当前颜色与线宽", async () => {
+    const ops = await drawThenSave("rect", [50, 50], [150, 120]);
+    const op = ops.list.find((o) => o.kind === "rect");
+    expect(op).toBeDefined();
+    expect((op as { color: string }).color).toBe("red");
+    // FAKE_BMP.width = 2000，happy-dom 的 window.innerWidth = 1024，scale ≈ 1.953125，
+    // 默认档 medium 的 CSS 线宽是 4 → Math.round(4 * 2000 / 1024) = Math.round(7.8125) = 8。
+    // 钉死具体值——lineWidth() 有 Math.max(1, …) 兜底恒 ≥ 1，只断言 >0 空转，测不出
+    // 线宽算错、漏乘 scale 或用错档位。
+    expect((op as { width: number }).width).toBe(8);
+  });
+
+  it("矩形坐标是位图坐标，不是 CSS 坐标——底图宽 2000、视口宽 1024 时要放大", async () => {
+    const ops = await drawThenSave("rect", [50, 50], [150, 120]);
+    const op = ops.list.find((o) => o.kind === "rect") as { r: Rect };
+    // FAKE_BMP.width = 2000,happy-dom 的 window.innerWidth = 1024,scale ≈ 1.95
+    expect(op.r.x).toBeGreaterThan(50);
+  });
+
+  it("点一下不拖不生成矩形——误点不该留下一个看不见的框", async () => {
+    const ops = await drawThenSave("rect", [50, 50], [52, 51]);
+    expect(ops.list.some((o) => o.kind === "rect")).toBe(false);
+  });
+
+  it("矩形工具下拖拽不重新取景——要改取景得先切回选区工具", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码——后面的形状拖拽要用到位图
+    drag([10, 10], [400, 300]);
+    (host()!.shadowRoot!.querySelector('[data-tool="rect"]') as HTMLButtonElement).click();
+    drag([50, 50], [150, 120]);
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const r = copy.mock.calls[0][1] as Rect;
+    expect(r).toEqual({ x: 10, y: 10, w: 390, h: 290 });
+  });
+
+  it("画完矩形后撤销按钮可用，撤销后列表里没有矩形了", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码——形状拖拽要用到位图
+    drag([10, 10], [400, 300]);
+    (host()!.shadowRoot!.querySelector('[data-tool="rect"]') as HTMLButtonElement).click();
+    drag([50, 50], [150, 120]);
+    const undoBtn = host()!.shadowRoot!.querySelector("[data-undo]") as HTMLButtonElement;
+    expect(undoBtn.disabled).toBe(false);
+    undoBtn.click();
+    expect(undoBtn.disabled).toBe(true);
+    // 光是按钮的 disabled 翻转测不出 ops 是否真的被撤销了——把 mutate 写成
+    // "压栈但不改 ops" 一样能让上面两行通过。这里补一次保存，直接看列表。
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect((copy.mock.calls[0][2] as Ops).list).toHaveLength(0);
+  });
+});
+
+describe("箭头工具", () => {
+  it("拖一次生成一个 arrow op，起终点都是位图坐标", async () => {
+    const ops = await drawThenSave("arrow", [50, 50], [200, 160]);
+    const op = ops.list.find((o) => o.kind === "arrow") as { from: Pt; to: Pt } | undefined;
+    expect(op).toBeDefined();
+    expect(op!.from.x).toBeGreaterThan(50); // scale ≈ 1.95
+    expect(op!.to.x).toBeGreaterThan(op!.from.x);
+  });
+
+  it("点一下不拖不生成箭头", async () => {
+    const ops = await drawThenSave("arrow", [50, 50], [50, 50]);
+    expect(ops.list.some((o) => o.kind === "arrow")).toBe(false);
+  });
+
+  it("矩形和箭头能共存，且按绘制先后排列", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码——后面的形状拖拽要用到位图
+    drag([10, 10], [400, 300]);
+    (host()!.shadowRoot!.querySelector('[data-tool="rect"]') as HTMLButtonElement).click();
+    drag([50, 50], [150, 120]);
+    (host()!.shadowRoot!.querySelector('[data-tool="arrow"]') as HTMLButtonElement).click();
+    drag([60, 60], [200, 160]);
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const ops = copy.mock.calls[0][2] as Ops;
+    expect(ops.list.map((o) => o.kind)).toEqual(["rect", "arrow"]);
   });
 });
 
@@ -709,5 +814,259 @@ describe("copyRegion 在非安全上下文(http 页面)下的兜底", () => {
     expect(write).toHaveBeenCalled();
     expect(execCommand).not.toHaveBeenCalled();
     expect(toastText()).toContain(translate("en", "shot.copied"));
+  });
+});
+
+describe("文字工具", () => {
+  function textInput(): HTMLInputElement {
+    return host()!.shadowRoot!.querySelector("[data-shot-text-input]") as HTMLInputElement;
+  }
+  function pickTool(t: string): void {
+    (host()!.shadowRoot!.querySelector(`[data-tool="${t}"]`) as HTMLButtonElement).click();
+  }
+  function clickSurface(x: number, y: number): void {
+    const surface = host()!.shadowRoot!.querySelector("[data-shot-surface]")!;
+    surface.dispatchEvent(new MouseEvent("mousedown", { clientX: x, clientY: y, button: 0, bubbles: true }));
+    surface.dispatchEvent(new MouseEvent("mouseup", { clientX: x, clientY: y, bubbles: true }));
+  }
+
+  it("在选区里点一下就能打字，定稿后成为一条 text op", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码——文字定位要用到位图换算
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "注意这里";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const ops = copy.mock.calls[0][2] as Ops;
+    const op = ops.list.find((o) => o.kind === "text") as { text: string; color: string };
+    expect(op.text).toBe("注意这里");
+    expect(op.color).toBe("red");
+  });
+
+  it("什么都没打就定稿，不会留下一条空文字", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect((copy.mock.calls[0][2] as Ops).list.some((o) => o.kind === "text")).toBe(false);
+  });
+
+  it("编辑期间按 Esc 只定稿，不关闭覆盖层——再按一次才关", async () => {
+    showOverlay(DATA_URL, vi.fn(async () => {}));
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "x";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }));
+    expect(host()).not.toBeNull();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(host()).toBeNull();
+  });
+
+  it("编辑期间按 Enter 不触发保存——那次回车是给文字的", async () => {
+    const copy = vi.fn(async () => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "x";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    await Promise.resolve();
+    expect(copy).not.toHaveBeenCalled();
+    expect(host()).not.toBeNull();
+  });
+
+  it("点回已有文字能改内容，改完仍在列表原位置——层叠顺序不能变", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "甲";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    pickTool("rect");
+    drag([200, 200], [300, 260]);
+    pickTool("text");
+    clickSurface(102, 105); // 点回那条文字
+    textInput().value = "乙";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const ops = copy.mock.calls[0][2] as Ops;
+    expect(ops.list.map((o) => o.kind)).toEqual(["text", "rect"]);
+    expect((ops.list[0] as { text: string }).text).toBe("乙");
+  });
+
+  it("改完文字后撤销，恢复的是上一版内容，而不是把整条删掉", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "甲";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    clickSurface(102, 105);
+    textInput().value = "乙";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    (host()!.shadowRoot!.querySelector("[data-undo]") as HTMLButtonElement).click();
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const ops = copy.mock.calls[0][2] as Ops;
+    expect(ops.list).toHaveLength(1);
+    expect((ops.list[0] as { text: string }).text).toBe("甲");
+  });
+
+  it("把已有文字清空再定稿，那条就被删掉", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "甲";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    clickSurface(102, 105);
+    textInput().value = "";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect((copy.mock.calls[0][2] as Ops).list).toHaveLength(0);
+  });
+
+  it("点保存时还在输入中，那条文字也要一起存进去", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "还没按回车";
+    textInput().dispatchEvent(new Event("input"));
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const op = (copy.mock.calls[0][2] as Ops).list.find((o) => o.kind === "text") as { text: string };
+    expect(op.text).toBe("还没按回车");
+  });
+
+  it("位图还没解码完时点文字工具：不产生 text op，也不进入编辑态", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    // 故意不等解码完成(不用 setTimeout(0))——这正是本用例要复现的场景：
+    // 位图还没就绪时，用户已经拖好选区、切到文字工具、点了一下。
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    // 没有进入编辑态：shadow root 的活动元素不是文字输入框。
+    expect(host()!.shadowRoot!.activeElement).not.toBe(textInput());
+    // 位图解码落地、点保存后，这次点击也没有留下任何 text op。
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const ops = copy.mock.calls[0][2] as Ops;
+    expect(ops.list.some((o) => o.kind === "text")).toBe(false);
+  });
+
+  it("按在文字上小幅抖动(<3 CSS 像素)后松手：仍进入编辑态，不是拖动", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "占位";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+
+    const surface = host()!.shadowRoot!.querySelector("[data-shot-surface]")!;
+    surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 100, clientY: 100, button: 0, bubbles: true }));
+    // 2 CSS 像素的手抖：换成位图坐标会有好几像素的差，但这在死区之内，不该被
+    // 判成"想拖动"。
+    surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 102, clientY: 101, bubbles: true }));
+    surface.dispatchEvent(new MouseEvent("mouseup", { clientX: 102, clientY: 101, bubbles: true }));
+
+    // 进入了编辑态：输入框拿到焦点，内容是原文字，可以接着改。
+    expect(host()!.shadowRoot!.activeElement).toBe(textInput());
+    expect(textInput().value).toBe("占位");
+  });
+
+  it("按在文字上移动 10 CSS 像素后松手：按拖动处理，不进入编辑态", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "占位";
+    textInput().dispatchEvent(new Event("input"));
+    textInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+
+    const surface = host()!.shadowRoot!.querySelector("[data-shot-surface]")!;
+    surface.dispatchEvent(new MouseEvent("mousedown", { clientX: 100, clientY: 100, button: 0, bubbles: true }));
+    surface.dispatchEvent(new MouseEvent("mousemove", { clientX: 110, clientY: 100, bubbles: true }));
+    surface.dispatchEvent(new MouseEvent("mouseup", { clientX: 110, clientY: 100, bubbles: true }));
+
+    // 没有进入编辑态：远超死区的位移应当按拖动处理。
+    expect(host()!.shadowRoot!.activeElement).not.toBe(textInput());
+
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const ops = copy.mock.calls[0][2] as Ops;
+    const textOps = ops.list.filter((o) => o.kind === "text");
+    expect(textOps).toHaveLength(1); // 还是那一条文字，没有被拖丢或者复制出第二条
+    // 位图坐标下原点大约是 195(100 CSS px * scale ≈ 1.95),拖动 10 CSS 像素后应明显变大。
+    expect((textOps[0] as { at: Pt }).at.x).toBeGreaterThan(195);
+  });
+
+  it("编辑中切换工具：文字先定稿、退出编辑态，再执行切换", async () => {
+    const copy = vi.fn(async (_bmp: ImageBitmap, _r: Rect, _ops: Ops) => {});
+    showOverlay(DATA_URL, copy);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 等解码
+    drag([10, 10], [400, 300]);
+    pickTool("text");
+    clickSurface(100, 100);
+    textInput().value = "切换前";
+    textInput().dispatchEvent(new Event("input"));
+    // happy-dom 的 .click() 不会像真实浏览器那样抢走焦点，所以这里不能指望 blur
+    // 顺带定稿——必须是 onTool 自己显式 commit。
+    pickTool("rect");
+    expect(host()!.shadowRoot!.activeElement).not.toBe(textInput());
+
+    (host()!.shadowRoot!.querySelector("[data-shot-save]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const op = (copy.mock.calls[0][2] as Ops).list.find((o) => o.kind === "text") as
+      | { text: string }
+      | undefined;
+    expect(op?.text).toBe("切换前");
   });
 });
